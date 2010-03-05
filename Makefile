@@ -1,5 +1,5 @@
 OBJS = sim.o memory.o io.o image.o warn.o
-INCL = arm.h
+INCL = sim.h
 
 CFLAGS = -Wall -Werror -O2
 

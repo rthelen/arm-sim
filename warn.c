@@ -1,4 +1,4 @@
-#include "arm.h"
+#include "sim.h"
 
 void warn(const char *fmt, ...)
 {

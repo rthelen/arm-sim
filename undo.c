@@ -1,4 +1,4 @@
-#include "arm.h"
+#include "sim.h"
 
 /*
  * undo architecture

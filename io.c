@@ -1,4 +1,4 @@
-#include "arm.h"
+#include "sim.h"
 
 void io_write(reg str, reg len)
 {

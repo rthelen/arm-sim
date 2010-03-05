@@ -25,7 +25,7 @@
  *
  */
 
-#include "arm.h"
+#include "sim.h"
 
 int main(int argc, char *argv[])
 {
