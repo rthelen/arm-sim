@@ -1,7 +1,7 @@
-OBJS = sim.o memory.o io.o image.o warn.o
+OBJS = sim.o memory.o io.o image.o warn.o forth.o
 INCL = sim.h
 
-CFLAGS = -Wall -Werror -O2
+CFLAGS = -Wall -Werror -O2 -std=c99
 
 ifneq ($(DEBUG),)
 	CFLAGS += -ggdb

@@ -5,7 +5,7 @@ void io_write(reg str, reg len)
     char *s;
 
     while (len-- > 0) {
-        s = memory_addr(str++, 1);
+        s = memory_range(str++, 1);
         if (!s) {
             /*
              * str + len exceeded the bounds of memory assigned to the process.
@@ -21,7 +21,7 @@ void io_write(reg str, reg len)
 
 reg io_readline(reg buffer, reg len)
 {
-    char *s = memory_addr(buffer, len);
+    char *s = memory_range(buffer, len);
 
     if (!s) {
         /*
