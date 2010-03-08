@@ -15,7 +15,7 @@ int image_load(char *file_name)
         return -1;
     }
 
-    if (!fseek(f, 0, SEEK_END)) {
+    if (fseek(f, 0, SEEK_END)) {
         goto err;
     }
 
@@ -24,7 +24,7 @@ int image_load(char *file_name)
     image = malloc(image_size);
     ASSERT(image);
 
-    if (!fseek(f, 0, SEEK_SET)) {
+    if (fseek(f, 0, SEEK_SET)) {
         goto err;
     }
 
