@@ -1,10 +1,12 @@
-OBJS = sim.o memory.o io.o image.o warn.o forth.o
+OBJS = sim.o memory.o io.o image.o warn.o forth.o decode.o disassemble.o
 INCL = sim.h
 
-CFLAGS = -Wall -Werror -O2 -std=c99
+CFLAGS = -Wall -Werror -std=c99
 
 ifneq ($(DEBUG),)
 	CFLAGS += -ggdb
+else
+	CFLAGS += -O2
 endif
 
 sim: ${OBJS} ${INCL}

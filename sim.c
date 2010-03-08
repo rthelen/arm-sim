@@ -27,18 +27,38 @@
 
 #include "sim.h"
 
+void brkpoint(void)
+{
+    /*
+     * You can set a breakpoint on this function and call it conditionally
+     * from code to help debug things.
+     */
+}
+
 int main(int argc, char *argv[])
 {
-    char buffer[10];
+    init_memory(0x80000000, MB(16));
 
-    buffer[0] = 0;
-    fgets(buffer, sizeof(buffer), stdin);
+    if (image_load("/private/tftpboot/FORTH/FORTH.img")) {
+        fprintf(stderr, "ERROR: Couldn't load image /private/tftpboot/FORTH/FORTH.img\n");
+        exit(-1);
+    }
 
-    /*
-     * Note: fgets() null terminates the input string.
-     */
+    if (forth_parse_image()) {
+        fprintf(stderr, "ERROR: Kernel image appears incorrect\n");
+        exit(-1);
+    }
 
-    printf("%s", buffer);
+    if (forth_relocate_image(0)) {
+        fprintf(stderr, "ERROR: Kernel image failed relocation\n");
+        exit(-1);
+    }
+
+    reg pc = forth_init(0);
+
+    printf("Initial PC = %8.8x\n", pc);
+
+    mem_dump(pc, 64);
 
     return 0;
 }

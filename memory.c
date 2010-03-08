@@ -1,4 +1,5 @@
 #include "sim.h"
+#include "arm.h"
 
 byte *memory;
 
@@ -83,8 +84,13 @@ byte mem_loadb(reg arm_addr, reg arm_offset)
 
 void mem_dump(reg arm_addr, reg arm_numwords)
 {
+    char instr[40];
     while (arm_numwords > 0) {
-        printf("%8.8x: %8.8x\n", arm_addr, mem_load(arm_addr, 0));
+        reg ir = mem_load(arm_addr, 0);
+        // reg i = arm_decode_instr(ir);
+        // printf("%8.8x: %8.8x - %d\n", arm_addr, ir, i);
+        disassemble(arm_addr, ir, instr, sizeof(instr));
+        printf("%8.8x: %8.8x %-32s\n", arm_addr, ir, instr);
         arm_addr += 4;
         arm_numwords -= 4;
     }

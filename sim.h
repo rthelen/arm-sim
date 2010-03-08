@@ -26,6 +26,8 @@ extern reg addr_size;
 extern byte *image;
 extern int image_size;
 
+void brkpoint(void);
+
 void warn(const char *fmt, ...);
 
 void init_memory(reg base, reg size);
@@ -52,3 +54,5 @@ int undo(int num_steps);
 int redo(int num_steps);
 int undo_size(void);
 int redo_size(void);
+
+void disassemble(reg addr, reg instr, char *buff, int sz);
