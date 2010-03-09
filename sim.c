@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
 
     printf("Initial PC = %8.8x\n", pc);
 
-    mem_dump(0x800000ac, 64);
+    mem_dump(0x80000000, 2400);
 
     return 0;
 }

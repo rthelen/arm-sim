@@ -13,9 +13,7 @@ typedef reg arm_cond_t;
 typedef enum { 
     ARM_INSTR_ILLEGAL,
     ARM_INSTR_B,
-    ARM_INSTR_BL,
     ARM_INSTR_BX_RM,
-    ARM_INSTR_BLX_RM,
     ARM_INSTR_BLX,     // condition = 0xF
     ARM_INSTR_SWI,
 

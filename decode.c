@@ -20,15 +20,13 @@ arm_instr_t arm_decode_instr(reg instr)
 {
     arm_instr_t t = ARM_INSTR_ILLEGAL;
 
-    if (IBITS(25, 4) == BPAT4(1,0,1,0)) return (ARM_INSTR_B);
-    if (IBITS(25, 4) == BPAT4(1,0,1,1)) return (ARM_INSTR_BL);
     if (IBITS(28, 4) == 0xF) {
-        if (IBITS(25, 3) == 0x7D)       return (ARM_INSTR_BLX);
+        if (IBITS(25, 3) == BPAT3(1,0,1))        return (ARM_INSTR_BLX);
     } else {
-        if (IBITS(4, 24) == 0x12FFF1)   return (ARM_INSTR_BX_RM);
-        if (IBITS(4, 24) == 0x12FFF3)   return (ARM_INSTR_BLX_RM);
+        if (IBIT(4) && IBITS(6, 22) == 0x04bffc) return (ARM_INSTR_BX_RM);
+        if (IBITS(25, 3) == BPAT3(1,0,1))        return (ARM_INSTR_B);
     }
-    if (IBITS(24, 4) == 0xF)            return (ARM_INSTR_SWI);
+    if (IBITS(24, 4) == 0xF)                   return (ARM_INSTR_SWI);
     if (IBITS(26, 2) == BPAT2(0,0)) {
         if (!IBIT(25) && !IBIT(4))             return (ARM_INSTR_AND + IBITS(21, 4));
         if (!IBIT(25) &&  IBIT(4) && !IBIT(7)) return (ARM_INSTR_AND + IBITS(21, 4));

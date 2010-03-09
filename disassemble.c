@@ -22,6 +22,31 @@ static reg dest_addr(reg addr, reg offset, int offset_sz, int half_flag)
     return (addr + 8 + offset) & 0xffffffff;
 }
 
+#define MNEMONIC_FIELD_SZ	8
+static void print_mnemonic(char *buff, int sz, const char *fmt, ...)
+{
+    va_list va;
+
+    va_start(va, fmt);
+    int len = vsnprintf(buff, sz, fmt, va);
+    while (len < MNEMONIC_FIELD_SZ) {
+        if (len >= (sz -1)) return;
+        buff[len++] = ' ';
+        buff[len] = '\0';
+    }
+}
+
+static void append_operands(char *buff, int sz, const char *fmt, ...)
+{
+    va_list va;
+
+    int len = strlen(buff);
+
+    if (len >= (sz -1)) return;
+
+    va_start(va, fmt);
+    vsnprintf(buff + len, sz - len, fmt, va);
+}
 
 void disassemble(reg addr, reg instr, char *buff, int sz)
 {
@@ -63,28 +88,29 @@ void disassemble(reg addr, reg instr, char *buff, int sz)
 
     switch (op) {
     case ARM_INSTR_B:
-    case ARM_INSTR_BL:
-        snprintf(buff, sz, "b%s%s %x",
-                 (op == ARM_INSTR_BL) ? "l" : "",
-                 conds[cond],
-                 dest_addr(addr, imm24bit, 24, 0));
+        print_mnemonic(buff, sz, "b%s%s",
+                       IBIT(24) ? "l" : "",
+                       conds[cond]);
+        append_operands(buff, sz, "%x",
+                        dest_addr(addr, imm24bit, 24, 0));
         break;
 
     case ARM_INSTR_BX_RM:
-    case ARM_INSTR_BLX_RM:
-        snprintf(buff, sz, "b%sx%s %s",
-                 (op == ARM_INSTR_BLX_RM) ? "l" : "",
-                 conds[cond],
-                 regs[rm]);
+        print_mnemonic(buff, sz, "b%sx%s",
+                       IBIT(5) ? "l" : "",
+                       conds[cond]);
+        append_operands(buff, sz, "%s", regs[rm]);
         break;
 
     case ARM_INSTR_BLX:
-        snprintf(buff, sz, "blx %x",
-                 dest_addr(addr, imm24bit, 24, IBIT(24)));
+        print_mnemonic(buff, sz, "blx");
+        append_operands(buff, sz, "%x",
+                        dest_addr(addr, imm24bit, 24, IBIT(24)));
         break;
 
     case ARM_INSTR_SWI:
-        snprintf(buff, sz, "swi %x", imm24bit);
+        print_mnemonic(buff, sz, "swi");
+        append_operands(buff, sz, "%x", imm24bit);
         break;
 
     case ARM_INSTR_AND:
@@ -110,7 +136,7 @@ void disassemble(reg addr, reg instr, char *buff, int sz)
             setconds = 0;
         }
 
-        snprintf(temp2, t2sz, "%s%s%s ", opcodes[opcode], conds[cond], setconds ? "s" : "");
+        print_mnemonic(buff, sz, "%s%s%s", opcodes[opcode], conds[cond], setconds ? "s" : "");
 
         if (IBIT(25)) {
             snprintf(temp1, t1sz, "#%8.8x", imm8bit << (imm_rot << 1));
@@ -135,19 +161,19 @@ void disassemble(reg addr, reg instr, char *buff, int sz)
         case ARM_INSTR_RSC:
         case ARM_INSTR_ORR:
         case ARM_INSTR_BIC:
-            snprintf(buff, sz, "%s %s, %s, %s", temp2, regs[rd], regs[rn], temp1);
+            append_operands(buff, sz, "%s, %s, %s", regs[rd], regs[rn], temp1);
             break;
 
         case ARM_INSTR_TST:
         case ARM_INSTR_TEQ:
         case ARM_INSTR_CMP:
         case ARM_INSTR_CMN:
-            snprintf(buff, sz, "%s %s, %s", temp2, regs[rn], temp1);
+            append_operands(buff, sz, "%s, %s", regs[rn], temp1);
             break;
 
         case ARM_INSTR_MOV:
         case ARM_INSTR_MVN:
-            snprintf(buff, sz, "%s %s, %s", temp2, regs[rd], temp1);
+            append_operands(buff, sz, "%s, %s", regs[rd], temp1);
             break;
         default:
             ASSERT(0);
@@ -159,11 +185,10 @@ void disassemble(reg addr, reg instr, char *buff, int sz)
     case ARM_INSTR_LDR:
     case ARM_INSTR_STB:
     case ARM_INSTR_LDB:
-        snprintf(temp1, t1sz, "%s%s%s %s,",
-                 IBIT(20) ? "ldr" : "str",
-                 conds[cond],
-                 IBIT(22) ? "b" : "",
-                 regs[rd]);
+        print_mnemonic(buff, sz, "%s%s%s",
+                       IBIT(20) ? "ldr" : "str",
+                       conds[cond],
+                       IBIT(22) ? "b" : "");
                  
         if (!IBIT(25)) {
             snprintf(temp2, t2sz, "%s%d", !up_down ? "-" : "", imm12bit);
@@ -191,22 +216,20 @@ void disassemble(reg addr, reg instr, char *buff, int sz)
         }
 
         if (pre_post) {
-            snprintf(buff, sz, "%s [%s, %s]%s%s", temp1, regs[rn], temp2,
-                     write_back ? "!" : "", temp3);
+            append_operands(buff, sz, "%s, [%s, %s]%s%s", regs[rd], regs[rn], temp2,
+                            write_back ? "!" : "", temp3);
         } else {
-            snprintf(buff, sz, "%s [%s], %s%s", temp1, regs[rn], temp2, temp3);
+            append_operands(buff, sz, "%s, [%s], %s%s", regs[rd], regs[rn], temp2, temp3);
         }
         break;
 
     case ARM_INSTR_STM:
     case ARM_INSTR_LDM:
-        snprintf(temp1, t1sz, "%s%s%s%s %s%s,",
-                 (op == ARM_INSTR_STM) ? "stm" : "ldm",
-                 conds[cond],
-                 up_down ? "i" : "d",
-                 pre_post ? "b" : "a",
-                 regs[rn],
-                 write_back ? "!" : "");
+        print_mnemonic(buff, sz, "%s%s%s%s",
+                       (op == ARM_INSTR_STM) ? "stm" : "ldm",
+                       conds[cond],
+                       up_down ? "i" : "d",
+                       pre_post ? "b" : "a");
         temp2[0] = '\0';
         for(int i = 0; i < 16; i++) {
             if (!IBIT(i)) continue;
@@ -215,10 +238,13 @@ void disassemble(reg addr, reg instr, char *buff, int sz)
             }
             strcat(temp2, regs[i]);
         }
-        snprintf(buff, sz, "%s {%s}", temp1, temp2);
+        append_operands(buff, sz, "%s%s, %s",
+                        regs[rn],
+                        write_back ? "!" : "",
+                        temp2);
         break;
 
     default:
-        snprintf(buff, sz, "(unknown instr)");
+        print_mnemonic(buff, sz, "(unknown instr)");
     }
 }
