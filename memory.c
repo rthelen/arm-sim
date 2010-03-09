@@ -89,9 +89,21 @@ void mem_dump(reg arm_addr, reg arm_numwords)
         reg ir = mem_load(arm_addr, 0);
         // reg i = arm_decode_instr(ir);
         // printf("%8.8x: %8.8x - %d\n", arm_addr, ir, i);
-        disassemble(arm_addr, ir, instr, sizeof(instr));
-        printf("%8.8x: %8.8x %-32s\n", arm_addr, ir, instr);
-        arm_addr += 4;
-        arm_numwords -= 4;
+        /*
+         * Check to see if this address is the beginning of a Forth header.
+         */
+        reg skip = forth_is_header(arm_addr);
+        if (!skip) {
+            disassemble(arm_addr, ir, instr, sizeof(instr));
+            printf("%8.8x: %8.8x %-32s\n", arm_addr, ir, instr);
+            skip = 1;
+        }
+
+        arm_addr += skip * 4;
+        if (skip > arm_numwords) {
+            arm_numwords = 0;
+        } else {
+            arm_numwords -= skip;
+        }
     }
 }

@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <assert.h>
 #include <stdarg.h>
+#include <ctype.h>
 
 typedef uint32_t reg;
 typedef uint8_t  byte;
@@ -43,6 +44,7 @@ int image_load(char *fname);
 int forth_parse_image(void);
 int forth_relocate_image(reg base);
 reg forth_init(reg base);
+reg forth_is_header(reg arm_addr);
 
 void io_write(reg str, reg len);
 reg io_readline(reg buffer, reg len);

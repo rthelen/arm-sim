@@ -130,3 +130,55 @@ reg forth_init(reg base)
 
     return mem_load(base, offsetof(forth_params_t, entry));
 }
+
+reg forth_is_header(reg arm_addr)
+{
+    int len, pad;
+
+    /*
+     * Skip padding
+     */
+    for (pad = 0; pad < 4; pad++) {
+        if (mem_loadb(arm_addr, pad) != 0) {
+            break;
+        }
+    }
+
+    if (pad == 4) {
+        return 0;  // Not a forth header
+    }
+
+    /*
+     * Consume ascii characters up to length byte
+     */
+    for (len = 0; len < 128; len++) {
+        byte c = mem_loadb(arm_addr, pad + len);
+        if (c == len) {
+            ASSERT(c > 0);
+            break;
+        }
+        if (!isprint(c) || c == ' ') {
+            return 0; // A non-printable character (or space) in a Forth names?  Nah.
+        }
+    }
+
+    if ((arm_addr + pad + len + 1) & 3) {
+        return 0; // The byte past the length byte should be word aligned
+    }
+
+    reg link = mem_load(arm_addr, pad + len + 1);
+    if (link && link < arm_addr - MB(1)) {
+        return 0;  // Too far away; not a valid link
+    }
+    if (link > arm_addr) {
+        return 0;  // Links never go forward
+    }
+
+    printf("%8.8x: -- ", arm_addr);
+    for (int i = 0; i < len; i++) {
+        printf("%c", mem_loadb(arm_addr, pad + i));
+    }
+    printf("   Links to %8.8x\n", link);
+
+    return (pad + len + 1 + 4) / 4;  // Likely a valid link
+}
