@@ -94,8 +94,16 @@ void mem_dump(reg arm_addr, reg arm_numwords)
          */
         reg skip = forth_is_header(arm_addr);
         if (!skip) {
+            skip = forth_is_word(arm_addr);
+        }
+
+        if (!skip) {
             disassemble(arm_addr, ir, instr, sizeof(instr));
+#if 1
             printf("%8.8x: %8.8x %-32s\n", arm_addr, ir, instr);
+#else
+            printf("        : %8.8x %-32s\n", ir, instr);
+#endif
             skip = 1;
         }
 

@@ -1,4 +1,5 @@
 #include "sim.h"
+#include "arm.h"
 
 typedef reg	cell;
 
@@ -16,6 +17,11 @@ cell image_ncells;  // Cells
 cell reloc_ncells;  // Cells
 cell *kernel_image;
 cell *reloc_bitmap;
+
+reg dovar_addr;
+reg docolon_addr;
+reg docons_addr;
+reg dodoes_addr;
 
 /*
  * Note that the comments denote whether -this- program reads, ignores, or
@@ -40,6 +46,45 @@ typedef struct forth_params_s {
 
 
 cell forth_readline(char *buffer, cell len);
+
+static char *forth_lookup_word_name(reg cfa)
+{
+    if (cfa < addr_base ||
+        cfa >= addr_base + addr_size) {
+        return NULL;
+    }
+
+    reg link = mem_load(cfa, -4);
+    if (link &&
+        (link <  addr_base &&
+         link >= addr_base + addr_size)) {
+        return NULL;
+    }
+
+    byte len = mem_loadb(cfa, -5);
+    if (len > 128) {
+        return NULL;
+    }
+
+    reg strp = cfa-6;
+    while (len-- > 0) {
+        char c = mem_loadb(strp--, 0);
+        if (!isprint(c)) {
+            return NULL;
+        }
+    }
+
+    // Cache the names?
+
+    strp = cfa - 5;
+    len = mem_loadb(strp--, 0);
+    char *str = malloc(len + 1);
+    str[len] = '\0';
+    while (len-- > 0) {
+        str[len] = mem_loadb(strp--, 0);
+    }
+    return str;
+}
 
 int forth_parse_image(void)
 {
@@ -166,7 +211,9 @@ reg forth_is_header(reg arm_addr)
         return 0; // The byte past the length byte should be word aligned
     }
 
-    reg link = mem_load(arm_addr, pad + len + 1);
+    reg lfa = arm_addr + pad + len + 1;
+    reg cfa = lfa + 4;
+    reg link = mem_load(lfa, 0);
     if (link && link < arm_addr - MB(1)) {
         return 0;  // Too far away; not a valid link
     }
@@ -174,11 +221,129 @@ reg forth_is_header(reg arm_addr)
         return 0;  // Links never go forward
     }
 
-    printf("%8.8x: -- ", arm_addr);
+    printf("\n        : ");
     for (int i = 0; i < len; i++) {
         printf("%c", mem_loadb(arm_addr, pad + i));
     }
-    printf("   Links to %8.8x\n", link);
+    printf("\n");
 
-    return (pad + len + 1 + 4) / 4;  // Likely a valid link
+    reg bl = mem_load(cfa, 0);
+    if (arm_decode_instr(bl) == ARM_INSTR_B) {
+        reg dest = decode_dest_addr(cfa, bl & 0x00ffffff, 24, 0);
+        if (dest == docolon_addr) {
+            while (1) {
+                cfa += 4;
+                reg word_cfa = mem_load(cfa, 0);
+                char *word_name = forth_lookup_word_name(word_cfa);
+                if (word_name) {
+                    printf("%8.8x: %s\n", cfa, word_name);
+                    free(word_name);  // Cache the names?
+                } else {
+                    /*
+                     * Handle lit and strings before exiting
+                     */
+                    return (cfa - arm_addr) / 4;
+                }
+            }                
+        }
+    }
+
+    return (pad + len + 1 + 4) / 4;
+}
+
+static int check_one_machine(reg addr, const reg *machine)
+{
+    int i = 0;
+
+    while (machine[i]) {
+        reg val = mem_load(addr, i*4);
+        if (val != machine[i]) return 0;
+        i++;
+    }
+
+    return 1;
+}
+
+static char *forth_is_machinery(reg addr)
+{
+    const reg dovar[] = { 0xe52d6004, /* str     top, [sp, -4]! */
+                          0xe1a0600e, /* mov     top, lr        */
+                          0xe494f004, /* next                   */
+                          0
+    };
+
+    const reg docons[] = { 0xe52d6004, /* str     top, [sp, -4]! */
+                           0xe59e6000, /* ldr     top, [lr]      */
+                           0xe494f004, /* next                   */
+                           0
+    };
+
+    const reg docolon[] = { 0xe5254004, /* str     ip, [rp, -4]! */
+                            0xe1a0400e, /* mov     ip, lr        */
+                            0xe494f004, /* next                  */
+                            0
+    };
+
+    const reg dodoes[] = { 0xe5254004, /* str     ip, [rp, -4]!  */
+                           0xe1a0400e, /* mov     ip, lr         */
+                           0xe52d6004, /* str     top, [sp, -4]! */
+                           0xe1a06000, /* mov     top, r0        */
+                           0xe494f004, /* next                   */
+                           0
+    };
+
+#define CHECK(name)							\
+    if (check_one_machine(addr, name)) {	\
+        name ## _addr = addr;				\
+        return #name;						\
+    }
+
+    CHECK(dovar)
+    CHECK(docons)
+    CHECK(docolon)
+    CHECK(dodoes)
+
+    return NULL;
+}
+
+
+reg forth_is_word(reg addr)
+{
+    reg word = mem_load(addr, 0);
+    char *machine_name;
+
+    machine_name = forth_is_machinery(addr);
+    if (machine_name) {
+        printf("\n        : %s\n", machine_name);
+        return 0;
+    }
+        
+    if (word == 0xe494f004) {
+        /*
+         * Next
+         */
+        printf("%8.8x: e494f004 next\n", addr);
+        return 1;
+    }
+
+    /*
+     * Check to see if the value at addr can be a CFA.
+     */
+
+    if (word < addr_base+8) return 0;
+    if (word >= addr_base + addr_size) return 0;
+
+    /*
+     * Check to see if the word before the CFA is a link field
+     * NOTE: Not all code has link fields.  Anonymous code words
+     * fall into this category.  :-(
+     */
+
+    reg link = mem_load(word -4, 0);
+    if (link) { // A link of 0 is valid
+        if (link < addr_base) return 0;
+        if (link > word) return 0;
+    }
+
+    return 0;
 }

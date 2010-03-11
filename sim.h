@@ -45,6 +45,7 @@ int forth_parse_image(void);
 int forth_relocate_image(reg base);
 reg forth_init(reg base);
 reg forth_is_header(reg arm_addr);
+reg forth_is_word(reg addr);
 
 void io_write(reg str, reg len);
 reg io_readline(reg buffer, reg len);

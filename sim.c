@@ -35,12 +35,22 @@ void brkpoint(void)
      */
 }
 
+extern reg image_ncells;
+
 int main(int argc, char *argv[])
 {
+    char *filename;
+
     init_memory(0x80000000, MB(16));
 
-    if (image_load("/private/tftpboot/FORTH/FORTH.img")) {
-        fprintf(stderr, "ERROR: Couldn't load image /private/tftpboot/FORTH/FORTH.img\n");
+    if (argv[1]) {
+        filename = argv[1];
+    } else {
+        filename = "/private/tftpboot/FORTH/FORTH.img";
+    }
+
+    if (image_load(filename)) {
+        fprintf(stderr, "ERROR: Couldn't load image %s\n", filename);
         exit(-1);
     }
 
@@ -56,9 +66,9 @@ int main(int argc, char *argv[])
 
     reg pc = forth_init(0);
 
-    printf("Initial PC = %8.8x\n", pc);
+    printf("Initial PC = %8.8x, image_ncells = %x\n", pc, image_ncells * 4);
 
-    mem_dump(0x80000000, 2400);
+    mem_dump(0x80000038, image_ncells - (0x38/4));
 
     return 0;
 }

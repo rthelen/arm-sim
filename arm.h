@@ -53,4 +53,5 @@ typedef enum {
     ARM_INSTR_LDM,
 } arm_instr_t;
 
+reg decode_dest_addr(reg addr, reg offset, int offset_sz, int half_flag);
 arm_instr_t arm_decode_instr(reg instr);

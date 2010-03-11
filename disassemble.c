@@ -4,7 +4,7 @@
 #define BITS(val, bit, nbits)	 (((val) >> (bit)) & ((1 << (nbits)) -1))
 #define BIT(val, bit)	         (((val) >> (bit)) & 1)
 
-static reg dest_addr(reg addr, reg offset, int offset_sz, int half_flag)
+reg decode_dest_addr(reg addr, reg offset, int offset_sz, int half_flag)
 {
     if (offset >> (offset_sz -1)) {
         /*
@@ -92,7 +92,7 @@ void disassemble(reg addr, reg instr, char *buff, int sz)
                        IBIT(24) ? "l" : "",
                        conds[cond]);
         append_operands(buff, sz, "%x",
-                        dest_addr(addr, imm24bit, 24, 0));
+                        decode_dest_addr(addr, imm24bit, 24, 0));
         break;
 
     case ARM_INSTR_BX_RM:
@@ -105,7 +105,7 @@ void disassemble(reg addr, reg instr, char *buff, int sz)
     case ARM_INSTR_BLX:
         print_mnemonic(buff, sz, "blx");
         append_operands(buff, sz, "%x",
-                        dest_addr(addr, imm24bit, 24, IBIT(24)));
+                        decode_dest_addr(addr, imm24bit, 24, IBIT(24)));
         break;
 
     case ARM_INSTR_SWI:
@@ -189,14 +189,18 @@ void disassemble(reg addr, reg instr, char *buff, int sz)
                        IBIT(20) ? "ldr" : "str",
                        conds[cond],
                        IBIT(22) ? "b" : "");
-                 
+
         if (!IBIT(25)) {
-            snprintf(temp2, t2sz, "%s%d", !up_down ? "-" : "", imm12bit);
+            if (imm12bit) {
+                snprintf(temp2, t2sz, ", %s%d", !up_down ? "-" : "", imm12bit);
+            } else {
+                temp2[0] = '\0';
+            }
         } else {
             if (imm5shift) {
-                snprintf(temp2, t2sz, "%s %s %d", regs[rm], shifts[imm5shift], imm5shift);
+                snprintf(temp2, t2sz, ", %s %s %d", regs[rm], shifts[shift_type], imm5shift);
             } else {
-                snprintf(temp2, t2sz, "%s", regs[rm]);
+                snprintf(temp2, t2sz, ", %s", regs[rm]);
             }
         }
         if (op == ARM_INSTR_LDR && rn == 15 && !IBIT(25)) {
@@ -216,10 +220,10 @@ void disassemble(reg addr, reg instr, char *buff, int sz)
         }
 
         if (pre_post) {
-            append_operands(buff, sz, "%s, [%s, %s]%s%s", regs[rd], regs[rn], temp2,
+            append_operands(buff, sz, "%s, [%s%s]%s%s", regs[rd], regs[rn], temp2,
                             write_back ? "!" : "", temp3);
         } else {
-            append_operands(buff, sz, "%s, [%s], %s%s", regs[rd], regs[rn], temp2, temp3);
+            append_operands(buff, sz, "%s, [%s]%s%s", regs[rd], regs[rn], temp2, temp3);
         }
         break;
 
