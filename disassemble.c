@@ -235,13 +235,20 @@ void disassemble(reg addr, reg instr, char *buff, int sz)
                        conds[cond],
                        up_down ? "i" : "d",
                        pre_post ? "b" : "a");
-        temp2[0] = '\0';
-        for(int i = 0; i < 16; i++) {
-            if (!IBIT(i)) continue;
-            if (temp2[0]) {
-                strcat(temp2, ", ");
+        {
+            temp2[0] = '\0';
+            strcat(temp2, "{");
+            int flag = 0;
+            for(int i = 0; i < 16; i++) {
+                if (!IBIT(i)) continue;
+                if (flag) {
+                    strcat(temp2, ", ");
+                } else {
+                    flag = 1;
+                }
+                strcat(temp2, regs[i]);
             }
-            strcat(temp2, regs[i]);
+            strcat(temp2, "}");
         }
         append_operands(buff, sz, "%s%s, %s",
                         regs[rn],
