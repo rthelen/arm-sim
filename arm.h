@@ -5,8 +5,16 @@
 #define FLAGS 16
 #define NUM_REGS	17
 
-reg arm_reg(int reg_num);
-void set_reg(int reg_num, reg val);
+#define Z	1
+#define V   2
+#define C   4
+#define N   8
+
+#define IBITS(bit, nbits)       BITS(instr, bit, nbits)
+#define IBIT(bit)               BIT(instr, bit)
+
+reg arm_get_reg(int reg_num);
+void arm_set_reg(int reg_num, reg val);
 
 typedef reg arm_cond_t;
 

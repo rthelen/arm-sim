@@ -1,16 +1,6 @@
 #include "sim.h"
 #include "arm.h"
 
-#define BITS(val, bit, nbits)   (((val) >> (bit)) & ((1 << (nbits)) -1))
-#define BIT(val, bit)           (((val) >> (bit)) & 1)
-#define IBITS(bit, nbits)       BITS(instr, bit, nbits)
-#define IBIT(bit)               BIT(instr, bit)
-#define BPAT1(a)	        	(a)
-#define BPAT2(b, a)				(BPAT1(b) << 1 | BPAT1(a))
-#define BPAT3(c, b, a)			(BPAT1(c) << 2 | BPAT2(b,a))
-#define BPAT4(d, b, c, a)   	(BPAT1(d) << 3 | BPAT3(c,b,a))
-#define BPAT5(e, d, b, c, a)    (BPAT1(e) << 4 | BPAT4(d,c,b,a))
-
 arm_cond_t arm_decode_cond(reg instr)
 {
     return IBITS(28,4);

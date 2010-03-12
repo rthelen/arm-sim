@@ -17,6 +17,22 @@ void init_memory(reg base, reg size)
     bzero(memory, size);
 }
 
+int mem_addr_is_valid(reg arm_addr)
+{
+    if (arm_addr < addr_base) return 0;
+    if (arm_addr >= addr_base + addr_size) return 0;
+    return 1;
+}
+
+int mem_range_is_valid(reg arm_addr, reg size)
+{
+    if (arm_addr < addr_base) return 0;
+    if (arm_addr + size < addr_base) return 0;
+    if (arm_addr > addr_base + addr_size) return 0;
+    if (arm_addr + size >= addr_base + addr_size) return 0;
+    return 1;
+}
+
 void *memory_range(reg arm_addr, reg arm_size)
 {
     if (arm_addr < addr_base) {
@@ -96,14 +112,16 @@ void mem_dump(reg arm_addr, reg arm_numwords)
         if (!skip) {
             skip = forth_is_word(arm_addr);
         }
-
         if (!skip) {
-            disassemble(arm_addr, ir, instr, sizeof(instr));
-#if 1
-            printf("%8.8x: %8.8x %-32s\n", arm_addr, ir, instr);
-#else
-            printf("        : %8.8x %-32s\n", ir, instr);
-#endif
+            skip = forth_is_string(arm_addr);
+        }
+        if (!skip) {
+            if (ir == 0) {
+                printf("%8.8x: 0\n", arm_addr);
+            } else {
+                disassemble(arm_addr, ir, instr, sizeof(instr));
+                printf("%8.8x: %8.8x %-32s\n", arm_addr, ir, instr);
+            }
             skip = 1;
         }
 

@@ -49,15 +49,12 @@ cell forth_readline(char *buffer, cell len);
 
 static char *forth_lookup_word_name(reg cfa)
 {
-    if (cfa < addr_base ||
-        cfa >= addr_base + addr_size) {
+    if (!mem_range_is_valid(cfa - 8, 12)) {
         return NULL;
     }
 
     reg link = mem_load(cfa, -4);
-    if (link &&
-        (link <  addr_base &&
-         link >= addr_base + addr_size)) {
+    if (link && !mem_range_is_valid(link, 4)) {
         return NULL;
     }
 
@@ -231,20 +228,8 @@ reg forth_is_header(reg arm_addr)
     if (arm_decode_instr(bl) == ARM_INSTR_B) {
         reg dest = decode_dest_addr(cfa, bl & 0x00ffffff, 24, 0);
         if (dest == docolon_addr) {
-            while (1) {
-                cfa += 4;
-                reg word_cfa = mem_load(cfa, 0);
-                char *word_name = forth_lookup_word_name(word_cfa);
-                if (word_name) {
-                    printf("%8.8x: %s\n", cfa, word_name);
-                    free(word_name);  // Cache the names?
-                } else {
-                    /*
-                     * Handle lit and strings before exiting
-                     */
-                    return (cfa - arm_addr) / 4;
-                }
-            }                
+            cfa += 4;
+            return (cfa - arm_addr) / 4;
         }
     }
 
@@ -330,8 +315,7 @@ reg forth_is_word(reg addr)
      * Check to see if the value at addr can be a CFA.
      */
 
-    if (word < addr_base+8) return 0;
-    if (word >= addr_base + addr_size) return 0;
+    if (!mem_range_is_valid(word -8, 12)) return 0;
 
     /*
      * Check to see if the word before the CFA is a link field
@@ -339,11 +323,55 @@ reg forth_is_word(reg addr)
      * fall into this category.  :-(
      */
 
-    reg link = mem_load(word -4, 0);
-    if (link) { // A link of 0 is valid
-        if (link < addr_base) return 0;
-        if (link > word) return 0;
+    char *name = forth_lookup_word_name(word);
+    if (!name) return 0;
+
+    printf("%8.8x: %s", addr, name);
+    reg count = 1;
+#define MATCH(str)	(!strcmp(name, str))
+    if (MATCH("(do)") || 
+        MATCH("(branch)") ||
+        MATCH("(0branch)") ||
+        MATCH("(loop)") ||
+        MATCH("(next)") ||
+        MATCH("(?for)") ||
+        MATCH("(0=branch)") ||
+        MATCH("(+loop)")) {
+        printf("  %8.8x", mem_load(addr, 4));
+        count ++;
+    } else if (MATCH("lit")) {
+        printf("  #%8.8x", mem_load(addr, 4));
+        count ++;
     }
 
-    return 0;
+    printf("\n");
+    free(name);
+
+    return count;
+}
+
+reg forth_is_string(reg addr)
+{
+    reg strlen = mem_load(addr, 0);
+    if (strlen > 256) return 0;
+    if (strlen == 0) return 0;
+
+    for (int i = 0; i < strlen; i++) {
+        byte c = mem_loadb(addr, 4+i);
+        if (!isprint(c) && !isspace(c)) return 0;
+    }
+
+    printf("%8.8x: \" ", addr);
+    for (int i = 0; i < strlen; i++) {
+        byte c = mem_loadb(addr, 4+i);
+        if (isprint(c)) printf("%c", c);
+        else if (c == ' ') printf(" ");
+        else if (c == '\n') printf("\\n");
+        else if (c == '\r') printf("\\r");
+        else if (c == '\t') printf("\\t");
+        else printf("\\%d%d%d", BITS(c, 6,2), BITS(c, 3,3), BITS(c, 0,3));
+    }
+    printf("\"\n");
+
+    return (4 + strlen + 3) >> 2;
 }

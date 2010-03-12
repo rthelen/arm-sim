@@ -1,9 +1,6 @@
 #include "sim.h"
 #include "arm.h"
 
-#define BITS(val, bit, nbits)	 (((val) >> (bit)) & ((1 << (nbits)) -1))
-#define BIT(val, bit)	         (((val) >> (bit)) & 1)
-
 reg decode_dest_addr(reg addr, reg offset, int offset_sz, int half_flag)
 {
     if (offset >> (offset_sz -1)) {
@@ -50,8 +47,6 @@ static void append_operands(char *buff, int sz, const char *fmt, ...)
 
 void disassemble(reg addr, reg instr, char *buff, int sz)
 {
-#define IBITS(bit, nbits)	BITS(instr, bit, nbits)
-#define IBIT(bit)		    BIT(instr, bit)
     reg cond = IBITS(28, 4);
     reg rm = IBITS(0, 4);
     reg rs = IBITS(8, 4);
@@ -85,14 +80,20 @@ void disassemble(reg addr, reg instr, char *buff, int sz)
     char *shifts[] = {"lsl", "lsr", "asr", "??"};
 
     arm_instr_t op = arm_decode_instr(instr);
+    reg dest;
 
     switch (op) {
     case ARM_INSTR_B:
         print_mnemonic(buff, sz, "b%s%s",
                        IBIT(24) ? "l" : "",
                        conds[cond]);
-        append_operands(buff, sz, "%x",
-                        decode_dest_addr(addr, imm24bit, 24, 0));
+        dest = decode_dest_addr(addr, imm24bit, 24, 0);
+        append_operands(buff, sz, "%x", dest);
+        if (dest == dovar_addr) append_operands(buff, sz, " ; dovar");
+        if (dest == docons_addr) append_operands(buff, sz, " ; docons");
+        if (dest == dodoes_addr) append_operands(buff, sz, " ; dodoes");
+        if (dest == docolon_addr) append_operands(buff, sz, " ; docolon");
+        
         break;
 
     case ARM_INSTR_BX_RM:

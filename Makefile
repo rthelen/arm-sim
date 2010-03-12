@@ -1,4 +1,4 @@
-OBJS = sim.o memory.o io.o image.o warn.o forth.o decode.o disassemble.o
+OBJS = sim.o memory.o io.o image.o warn.o forth.o decode.o disassemble.o execute.o arm.o undo.o
 INCL = sim.h
 
 CFLAGS = -Wall -Werror -std=c99

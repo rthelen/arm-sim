@@ -1,4 +1,5 @@
 #include "sim.h"
+#include "arm.h"
 
 /*
  * arm.c

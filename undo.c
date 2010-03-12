@@ -1,4 +1,5 @@
 #include "sim.h"
+#include "arm.h"
 
 /*
  * undo architecture
@@ -59,8 +60,8 @@ static undo_log_entry_t *undo_record_common(int type)
     undo_logs[undo_count].type = 0;
 
     u->type = type;
-    u->pc = arm_reg(ARM_PC);
-    u->flags = arm_reg(ARM_FLAGS);
+    u->pc = arm_get_reg(PC);
+    u->flags = arm_get_reg(FLAGS);
 
     return u;
 }
@@ -70,8 +71,8 @@ void undo_record_reg(int reg_num)
     undo_log_entry_t *u;
 
     u = undo_record_common(UNDO_REG);
-    u->reg_num = reg_num;
-    u->contents = arm_reg(reg_num);
+    u->u.reg_num = reg_num;
+    u->contents = arm_get_reg(reg_num);
 }
 
 
@@ -80,13 +81,13 @@ void undo_record_memory(reg address)
     undo_log_entry_t *u;
 
     u = undo_record_common(UNDO_MEM);
-    u->address = address;
-    u->contents = memory(address);
+    u->u.address = address;
+    u->contents = mem_load(address, 0);
 }
 
 void undo_another(void)
 {
-    ASSET(undo_count > 0);
+    ASSERT(undo_count > 0);
     undo_logs[undo_count -1].type = - undo_logs[undo_count].type;
 }
 
