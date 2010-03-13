@@ -92,7 +92,7 @@ int execute_one(void)
     arm_instr_t op = arm_decode_instr(instr);
     reg cond = IBITS(28, 4);
     reg rm = IBITS(0, 4);
-//    reg rs = IBITS(8, 4);
+    reg rs = IBITS(8, 4);
     reg rd = IBITS(12, 4);
     reg rn = IBITS(16, 4);
     reg up_down = IBIT(23);
@@ -100,8 +100,12 @@ int execute_one(void)
     reg write_back = IBIT(21);
     reg imm12bit = IBITS(0, 12);
     reg imm5shift = IBITS(7, 5);
+    reg imm8bit = IBITS(0, 8);
+    reg imm_rot  = IBITS(8, 4);
     reg shift_type = IBITS(5, 2);
+    reg setconds = IBIT(20);
     reg maddr, offset;
+    reg d, n, m;
 
     /*
      * Most instructions step forward one instruction
@@ -109,6 +113,11 @@ int execute_one(void)
      */
     undo_record_reg(PC);
     arm_set_reg(PC, pc + 4);
+
+    if (!execute_check_conds(cond)) {
+        undo_finish_instr();
+        return 1;
+    }
 
     switch (op) {
     case ARM_INSTR_B:
@@ -119,9 +128,7 @@ int execute_one(void)
             undo_record_reg(LR);
             arm_set_reg(LR, arm_get_reg(PC));
         }
-        if (execute_check_conds(cond)) {
-            arm_set_reg(PC, dest);
-        }
+        arm_set_reg(PC, dest);
         break;
     }
 
@@ -202,6 +209,116 @@ int execute_one(void)
 
         if (write_back) {
             arm_set_reg(rn, maddr);
+        }
+        break;
+
+    case ARM_INSTR_AND:
+    case ARM_INSTR_EOR:
+    case ARM_INSTR_SUB:
+    case ARM_INSTR_RSB:
+    case ARM_INSTR_ADD:
+    case ARM_INSTR_ADC:
+    case ARM_INSTR_SBC:
+    case ARM_INSTR_RSC:
+    case ARM_INSTR_TST:
+    case ARM_INSTR_TEQ:
+    case ARM_INSTR_CMP:
+    case ARM_INSTR_CMN:
+    case ARM_INSTR_ORR:
+    case ARM_INSTR_MOV:
+    case ARM_INSTR_BIC:
+    case ARM_INSTR_MVN:
+        if (op == ARM_INSTR_TST ||
+            op == ARM_INSTR_TEQ ||
+            op == ARM_INSTR_CMP ||
+            op == ARM_INSTR_CMN) {
+            setconds = 1;
+        }
+
+        n = arm_get_reg(rn);
+
+        if (IBIT(25)) {
+            m = imm8bit << (imm_rot << 1);
+        } else if (!IBIT(4)) {
+            m = barrel_shifter(arm_get_reg(rm), shift_type, imm5shift);
+        } else {
+            m = barrel_shifter(arm_get_reg(rm), shift_type, arm_get_reg(rs) & 31);
+        }
+
+        switch (op) {
+        case ARM_INSTR_AND: d = n &  m; break;
+        case ARM_INSTR_EOR: d = n ^  m; break;
+        case ARM_INSTR_SUB: d = n + ~m + 1; break;
+        case ARM_INSTR_RSB: d = m + ~n + 1; break;
+        case ARM_INSTR_ADD: d = n +  m; break;
+        case ARM_INSTR_ADC: d = n +  m + TF(arm_get_reg(FLAGS) & C); break;
+        case ARM_INSTR_SBC: d = n + ~m + TF(arm_get_reg(FLAGS) & C); break;
+        case ARM_INSTR_RSC: d = m + ~n + TF(arm_get_reg(FLAGS) & C); break;
+        case ARM_INSTR_TST: d = n &  m; break;
+        case ARM_INSTR_TEQ: d = n ^  m; break;
+        case ARM_INSTR_CMP: d = n + ~m + 1; break;
+        case ARM_INSTR_CMN: d = n +  m; break;
+        case ARM_INSTR_ORR: d = n |  m; break;
+        case ARM_INSTR_MOV: d =  m; break;
+        case ARM_INSTR_BIC: d = n & ~m; break;
+        case ARM_INSTR_MVN: d = ~m; break;
+        default: break;
+        }
+
+        switch (op) {
+        case ARM_INSTR_AND:
+        case ARM_INSTR_EOR:
+        case ARM_INSTR_TST:
+        case ARM_INSTR_TEQ:
+        case ARM_INSTR_ORR:
+        case ARM_INSTR_MOV:
+        case ARM_INSTR_BIC:
+        case ARM_INSTR_MVN:
+            if (setconds && rd != 15) {
+                undo_record_reg(FLAGS);
+                // V := V
+                // C := carry out from the barrel shifter, or C if shift is LSL #0
+                // Z := if d == 0
+                // N := if d & (1<<31)
+            }
+            break;
+
+        case ARM_INSTR_SUB:
+        case ARM_INSTR_RSB:
+        case ARM_INSTR_ADD:
+        case ARM_INSTR_ADC:
+        case ARM_INSTR_SBC:
+        case ARM_INSTR_RSC:
+        case ARM_INSTR_CMP:
+        case ARM_INSTR_CMN:
+            if (setconds && rd != 15) {
+                undo_record_reg(FLAGS);
+                // V := if overflow occurs into bit 31
+                // C := carry out of the ALU
+                // Z := if d == 0
+                // N := if d & (1<<31)
+            }
+            break;
+        default: break;
+        }
+
+        switch (op) {
+        case ARM_INSTR_AND:
+        case ARM_INSTR_EOR:
+        case ARM_INSTR_SUB:
+        case ARM_INSTR_RSB:
+        case ARM_INSTR_ADD:
+        case ARM_INSTR_ADC:
+        case ARM_INSTR_SBC:
+        case ARM_INSTR_RSC:
+        case ARM_INSTR_ORR:
+        case ARM_INSTR_MOV:
+        case ARM_INSTR_BIC:
+        case ARM_INSTR_MVN:
+            undo_record_reg(rd);
+            arm_set_reg(rd, d);
+            break;
+        default: break;
         }
         break;
 
