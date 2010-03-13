@@ -26,6 +26,7 @@
  */
 
 #include "sim.h"
+#include "arm.h"
 
 void brkpoint(void)
 {
@@ -39,15 +40,28 @@ extern reg image_ncells;
 
 int main(int argc, char *argv[])
 {
-    char *filename;
+    char *filename = "/private/tftpboot/FORTH/FORTH.img";
+    int dump = 0;
+    char **save_argv;
 
     init_memory(0x80000000, MB(16));
 
-    if (argv[1]) {
-        filename = argv[1];
-    } else {
-        filename = "/private/tftpboot/FORTH/FORTH.img";
-    }
+    argv += 1;
+    do {
+        save_argv = argv;
+
+        if (!*argv) break;
+
+        if (strcmp(*argv, "-f") == 0 && argv[1]) {
+            filename = argv[1];
+            argv += 2;
+        }
+
+        if (strcmp(*argv, "-d") == 0) {
+            dump = 1;
+            argv += 1;
+        }
+    } while (save_argv != argv);
 
     if (image_load(filename)) {
         fprintf(stderr, "ERROR: Couldn't load image %s\n", filename);
@@ -64,11 +78,27 @@ int main(int argc, char *argv[])
         exit(-1);
     }
 
-    reg pc = forth_init(0);
+    arm_set_reg(PC, forth_init(0));
+    arm_set_reg(R0, 0 + addr_base);
 
-    printf("Initial PC = %8.8x, image_ncells = %x\n", pc, image_ncells * 4);
-
-    mem_dump(0x80000038, image_ncells - (0x38/4));
+    if (!dump) {
+        printf("Initial PC = %8.8x, image_ncells = %x\n", arm_get_reg(PC), image_ncells * 4);
+        do {
+            char buff[256];
+            int sz = sizeof(buff);
+            reg instr = mem_load(arm_get_reg(PC), 0);
+            disassemble(arm_get_reg(PC), instr, buff, sz);
+            printf("%8.8x: %8.8x  %s\n", arm_get_reg(PC), instr, buff);
+            if (!execute_one()) break;
+            for (int i = 0; i < 16; i++) {
+                printf("%5s: %8.8x", regs[i], arm_get_reg(i));
+                if ((i & 3) == 3) printf("\n");
+                else              printf("   ");
+            }
+        } while (1);
+    } else {
+        mem_dump(0x80000038, image_ncells - (0x38/4));
+    }
 
     return 0;
 }
