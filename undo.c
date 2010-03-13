@@ -40,6 +40,7 @@ typedef struct {
 
 #define MAX_UNDO_LOGS		100000
 undo_log_entry_t undo_logs[MAX_UNDO_LOGS];
+int undo_started, undo_instr_first;
 int undo_count;
 int undo_idx;
 
@@ -66,9 +67,24 @@ static undo_log_entry_t *undo_record_common(int type)
     return u;
 }
 
+static void undo_start(void)
+{
+    undo_started = 1;
+    undo_instr_first = undo_count;
+}
+
+static void undo_another(void)
+{
+    ASSERT(undo_count > 0);
+    undo_logs[undo_count -1].type = - undo_logs[undo_count].type;
+}
+
 void undo_record_reg(int reg_num)
 {
     undo_log_entry_t *u;
+
+    if (undo_started) undo_another();
+    else undo_start();
 
     u = undo_record_common(UNDO_REG);
     u->u.reg_num = reg_num;
@@ -80,15 +96,17 @@ void undo_record_memory(reg address)
 {
     undo_log_entry_t *u;
 
+    if (undo_started) undo_another();
+    else undo_start();
+
     u = undo_record_common(UNDO_MEM);
     u->u.address = address;
     u->contents = mem_load(address, 0);
 }
 
-void undo_another(void)
+void undo_finish_instr(void)
 {
-    ASSERT(undo_count > 0);
-    undo_logs[undo_count -1].type = - undo_logs[undo_count].type;
+    undo_started = 0;
 }
 
 void undo_clear(void)

@@ -80,6 +80,7 @@ reg io_readline(reg buffer, reg len);
 void undo_record_reg(int reg_num);
 void undo_record_flags(void);
 void undo_record_memory(reg address);
+void undo_finish_instr(void);
 int undo(int num_steps);
 int redo(int num_steps);
 int undo_size(void);
