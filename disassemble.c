@@ -1,6 +1,8 @@
 #include "sim.h"
 #include "arm.h"
 
+char *regs[] = {"r0", "r1", "r2", "r3", "ip", "rp", "top", "count", "r8", "r9", "r10", "r11", "r12", "sp", "lr", "pc"};
+
 reg decode_dest_addr(reg addr, reg offset, int offset_sz, int half_flag)
 {
     if (offset >> (offset_sz -1)) {
@@ -76,7 +78,6 @@ void disassemble(reg addr, reg instr, char *buff, int sz)
 
     char *conds[] = {"eq", "ne", "hs", "lo", "mi", "pl", "vs", "vc", "hi", "ls", "ge", "lt", "gt", "le", "", "??"};
     char *opcodes[] = {"and", "eor", "sub", "rsb", "add", "adc", "sbc", "rsc", "tst", "teq", "cmp", "cmn", "orr", "mov", "bic", "mvn"};
-    char *regs[] = {"r0", "r1", "r2", "r3", "ip", "rp", "top", "count", "r8", "r9", "r10", "r11", "r12", "sp", "lr", "pc"};
     char *shifts[] = {"lsl", "lsr", "asr", "??"};
 
     arm_instr_t op = arm_decode_instr(instr);
@@ -94,19 +95,6 @@ void disassemble(reg addr, reg instr, char *buff, int sz)
         if (dest == dodoes_addr) append_operands(buff, sz, " ; dodoes");
         if (dest == docolon_addr) append_operands(buff, sz, " ; docolon");
         
-        break;
-
-    case ARM_INSTR_BX_RM:
-        print_mnemonic(buff, sz, "b%sx%s",
-                       IBIT(5) ? "l" : "",
-                       conds[cond]);
-        append_operands(buff, sz, "%s", regs[rm]);
-        break;
-
-    case ARM_INSTR_BLX:
-        print_mnemonic(buff, sz, "blx");
-        append_operands(buff, sz, "%x",
-                        decode_dest_addr(addr, imm24bit, 24, IBIT(24)));
         break;
 
     case ARM_INSTR_SWI:

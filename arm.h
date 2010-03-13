@@ -1,7 +1,23 @@
 
-#define SP  13
-#define LR	14
-#define PC	15
+#define R0  0
+#define R1  1
+#define R2  2
+#define R3  3
+#define R4  4
+#define R5  5
+#define R6  6
+#define R7  7
+#define R8  8
+#define R9  9
+#define R10 10
+#define R11 11
+#define R12 12
+#define R13 13
+#define R14 14
+#define R15 15
+#define SP  R13
+#define LR	R14
+#define PC	R15
 #define FLAGS 16
 #define NUM_REGS	17
 
@@ -15,14 +31,13 @@
 
 reg arm_get_reg(int reg_num);
 void arm_set_reg(int reg_num, reg val);
+extern char *regs[];
 
 typedef reg arm_cond_t;
 
 typedef enum { 
     ARM_INSTR_ILLEGAL,
     ARM_INSTR_B,
-    ARM_INSTR_BX_RM,
-    ARM_INSTR_BLX,     // condition = 0xF
     ARM_INSTR_SWI,
 
     ARM_INSTR_AND,     // Beginining of logic ops
@@ -57,9 +72,11 @@ typedef enum {
     ARM_INSTR_LDSB,
     ARM_INSTR_LDUH,
     ARM_INSTR_STH,
+
     ARM_INSTR_STM,
     ARM_INSTR_LDM,
 } arm_instr_t;
 
 reg decode_dest_addr(reg addr, reg offset, int offset_sz, int half_flag);
 arm_instr_t arm_decode_instr(reg instr);
+int execute_one(void);
