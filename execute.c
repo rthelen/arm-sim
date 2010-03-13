@@ -145,7 +145,7 @@ int execute_one(void)
         if (pre_post) maddr += offset;
         undo_record_reg(rd);
         arm_set_reg(rd, mem_load(maddr, 0));
-        if (write_back) {
+        if (write_back || !pre_post) {
             if (!pre_post) maddr += offset;
             undo_record_reg(rn);
             arm_set_reg(rn, maddr);
@@ -164,8 +164,8 @@ int execute_one(void)
         if (rn == 15) maddr += 4;
         if (pre_post) maddr += offset;
         undo_record_memory(maddr);
-        mem_store(maddr, 0, rd);
-        if (write_back) {
+        mem_store(maddr, 0, arm_get_reg(rd));
+        if (write_back || !pre_post) {
             if (!pre_post) maddr += offset;
             undo_record_reg(rn);
             arm_set_reg(rn, maddr);
