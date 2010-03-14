@@ -38,11 +38,12 @@ typedef struct {
     reg contents;
 } undo_log_entry_t;
 
-#define MAX_UNDO_LOGS		100000
+#define MAX_UNDO_LOGS		10000000
 undo_log_entry_t undo_logs[MAX_UNDO_LOGS];
 int undo_started, undo_instr_first;
 int undo_count;
 int undo_idx;
+int undo_disable;
 
 #define UNDO_REG		1
 #define UNDO_MEM		2
@@ -83,6 +84,8 @@ void undo_record_reg(int reg_num)
 {
     undo_log_entry_t *u;
 
+    if (undo_disable) return;
+
     if (undo_started) undo_another();
     else undo_start();
 
@@ -95,6 +98,8 @@ void undo_record_reg(int reg_num)
 void undo_record_memory(reg address)
 {
     undo_log_entry_t *u;
+
+    if (undo_disable) return;
 
     if (undo_started) undo_another();
     else undo_start();

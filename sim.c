@@ -67,6 +67,10 @@ int main(int argc, char *argv[])
             quiet = 1;
             argv += 1;
         }
+
+        if (strcmp(*argv, "-no-undo") == 0) {
+            undo_disable = 1;
+        }
     } while (save_argv != argv);
 
     if (image_load(filename)) {

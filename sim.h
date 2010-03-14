@@ -11,6 +11,8 @@
 typedef uint32_t reg;
 typedef uint8_t  byte;
 
+int sim_done;
+
 #define MB(x)	((x) << 20)
 #define KB(x)	((x) << 10)
 
@@ -50,6 +52,8 @@ extern reg dovar_addr;
 extern reg docolon_addr;
 extern reg docons_addr;
 extern reg dodoes_addr;
+
+extern int undo_disable;
 
 void brkpoint(void);
 
