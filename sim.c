@@ -41,11 +41,15 @@ extern reg image_ncells;
 int main(int argc, char *argv[])
 {
     char *filename = "/private/tftpboot/FORTH/FORTH.img";
-    int dump = 0;
-    int quiet = 0;
+    int dump;
+    int quiet;
     char **save_argv;
 
     init_memory(0x80000000, MB(16));
+
+    undo_disable = 1;
+    quiet = 1;
+    dump = 0;
 
     argv += 1;
     do {
@@ -62,9 +66,16 @@ int main(int argc, char *argv[])
         } else if (strcmp(*argv, "-q") == 0) {
             quiet = 1;
             argv += 1;
+        } else if (strcmp(*argv, "-v") == 0) {
+            quiet = 0;
+            argv += 1;
         } else if (strcmp(*argv, "-no-undo") == 0) {
             undo_disable = 1;
-        }
+            argv += 1;
+        } else if (strcmp(*argv, "-u") == 0) {
+            undo_disable = 0;
+            argv += 1;
+        } else /* usage() */ ;
     } while (save_argv != argv);
 
     if (image_load(filename)) {
