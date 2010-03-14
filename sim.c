@@ -56,19 +56,13 @@ int main(int argc, char *argv[])
         if (strcmp(*argv, "-f") == 0 && argv[1]) {
             filename = argv[1];
             argv += 2;
-        }
-
-        if (strcmp(*argv, "-d") == 0) {
+        } else if (strcmp(*argv, "-d") == 0) {
             dump = 1;
             argv += 1;
-        }
-
-        if (strcmp(*argv, "-q") == 0) {
+        } else if (strcmp(*argv, "-q") == 0) {
             quiet = 1;
             argv += 1;
-        }
-
-        if (strcmp(*argv, "-no-undo") == 0) {
+        } else if (strcmp(*argv, "-no-undo") == 0) {
             undo_disable = 1;
         }
     } while (save_argv != argv);
