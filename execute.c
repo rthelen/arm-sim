@@ -80,9 +80,28 @@ reg post_inc(reg addr, int pre_post, int up_down)
     else           return addr - 4;
 }
 
+int execute_callbacks(reg pc)
+{
+    undo_record_reg(PC);
+    arm_set_reg(PC, arm_get_reg(LR));
+    
+    switch (pc) {
+    case 1: sim_done = 1; break;
+    case 2: io_write(arm_get_reg(R0), arm_get_reg(R1)); break;
+    case 3: arm_set_reg(R0, io_readline(arm_get_reg(R0), arm_get_reg(R1))); break;
+    }
+
+    return 1;
+}
+
 int execute_one(void)
 {
     reg pc = arm_get_reg(PC);
+
+    if (pc > 0 && pc < 4) {
+        return execute_callbacks(pc);
+    }
+
     reg instr = mem_load(pc, 0);
     
     if (instr == BAD_MEMVAL) {
@@ -137,11 +156,13 @@ int execute_one(void)
             if (up_down) offset =  imm12bit;
             else         offset = -imm12bit;
         } else {
-            offset = barrel_shifter(arm_get_reg(rm), shift_type, imm5shift);
+            m = arm_get_reg(rm);
+            if (m == PC) m += 4;
+            offset = barrel_shifter(m, shift_type, imm5shift);
         }
 
         maddr = arm_get_reg(rn);
-        if (rn == 15) maddr += 4;
+        if (rn == PC) maddr += 4;
         if (pre_post) maddr += offset;
         undo_record_reg(rd);
         arm_set_reg(rd, mem_load(maddr, 0));
@@ -161,7 +182,7 @@ int execute_one(void)
         }
 
         maddr = arm_get_reg(rn);
-        if (rn == 15) maddr += 4;
+        if (rn == PC) maddr += 4;
         if (pre_post) maddr += offset;
         undo_record_memory(maddr);
         mem_store(maddr, 0, arm_get_reg(rd));
@@ -236,13 +257,18 @@ int execute_one(void)
         }
 
         n = arm_get_reg(rn);
+        if (rn == PC) n += 4;
 
         if (IBIT(25)) {
             m = imm8bit << (imm_rot << 1);
-        } else if (!IBIT(4)) {
-            m = barrel_shifter(arm_get_reg(rm), shift_type, imm5shift);
         } else {
-            m = barrel_shifter(arm_get_reg(rm), shift_type, arm_get_reg(rs) & 31);
+            m = arm_get_reg(rm);
+            if (rm == PC) m += 4;
+            if (!IBIT(4)) {
+                m = barrel_shifter(m, shift_type, imm5shift);
+            } else {
+                m = barrel_shifter(m, shift_type, arm_get_reg(rs) & 31);
+            }
         }
 
         switch (op) {
@@ -274,7 +300,7 @@ int execute_one(void)
         case ARM_INSTR_MOV:
         case ARM_INSTR_BIC:
         case ARM_INSTR_MVN:
-            if (setconds && rd != 15) {
+            if (setconds && rd != PC) {
                 undo_record_reg(FLAGS);
                 // V := V
                 // C := carry out from the barrel shifter, or C if shift is LSL #0
@@ -291,7 +317,7 @@ int execute_one(void)
         case ARM_INSTR_RSC:
         case ARM_INSTR_CMP:
         case ARM_INSTR_CMN:
-            if (setconds && rd != 15) {
+            if (setconds && rd != PC) {
                 undo_record_reg(FLAGS);
                 // V := if overflow occurs into bit 31
                 // C := carry out of the ALU
