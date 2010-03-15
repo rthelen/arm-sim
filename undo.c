@@ -38,7 +38,12 @@ typedef struct {
     reg contents;
 } undo_log_entry_t;
 
-#define MAX_UNDO_LOGS		10000000
+/*
+ * Add logic to use head/tail pointers so that the system can back up N
+ * instructions but can an arbitrary number of instructions.
+ */
+
+#define MAX_UNDO_LOGS		10000
 undo_log_entry_t undo_logs[MAX_UNDO_LOGS];
 int undo_started, undo_instr_first;
 int undo_count;
