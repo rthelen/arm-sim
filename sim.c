@@ -36,6 +36,27 @@ void brkpoint(void)
      */
 }
 
+const char *prog_name;
+void usage(void)
+{
+    fprintf(stderr, "%s [-dqvu] [-no-undo] [-f filename]\n", prog_name);
+    fprintf(stderr, "\n");
+    fprintf(stderr, "%s will simulate an ARM processor where the input is the\n", prog_name);
+    fprintf(stderr, "dictionary of a FORTH environment.  The program can be tailored\n");
+    fprintf(stderr, "for different FORTH systems.  This ARM simulator can also be\n");
+    fprintf(stderr, "modified to support non-FORTH systems, but that would be more work.\n");
+    fprintf(stderr, "\n");
+    fprintf(stderr, "-f filename  -- This is the name of the FORTH dictionary to load.\n");
+    fprintf(stderr, "-d           -- Dump (print) the dictionary as assembly and FORTH words.\n");
+    fprintf(stderr, "-q           -- Quiet output; i.e., don't list each instr. & reg values.\n");
+    fprintf(stderr, "-no-undo     -- Don't enable the undo logic.\n");
+    fprintf(stderr, "-v           -- Verbose output; print each instr. and reg values.\n");
+    fprintf(stderr, "-u           -- Enable the undo logic.\n");
+    fprintf(stderr, "\n");
+    fprintf(stderr, "The undo logic is a system by which the processor can be backed up some\n");
+    fprintf(stderr, "number of instructions.  It is off by default.\n");
+}
+
 extern reg image_ncells;
 
 int main(int argc, char *argv[])
@@ -44,6 +65,8 @@ int main(int argc, char *argv[])
     int dump;
     int quiet;
     char **save_argv;
+
+    prog_name = argv[0];
 
     init_memory(0x80000000, MB(16));
 
