@@ -21,10 +21,15 @@
 #define FLAGS 16
 #define NUM_REGS	17
 
-#define Z	1
-#define V   2
-#define C   4
-#define N   8
+#define Z_SHIFT		0
+#define V_SHIFT		1
+#define C_SHIFT		2
+#define N_SHIFT		3
+
+#define Z	(1 << Z_SHIFT)
+#define V   (1 << V_SHIFT)
+#define C   (1 << C_SHIFT)
+#define N   (1 << N_SHIFT)
 
 #define IBITS(bit, nbits)       BITS(instr, bit, nbits)
 #define IBIT(bit)               BIT(instr, bit)
