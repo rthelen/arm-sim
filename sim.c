@@ -52,6 +52,7 @@ void usage(void)
     fprintf(stderr, "-no-undo     -- Don't enable the undo logic.\n");
     fprintf(stderr, "-v           -- Verbose output; print each instr. and reg values.\n");
     fprintf(stderr, "-u           -- Enable the undo logic.\n");
+    fprintf(stderr, "-i           -- Interactive mode.  This also enables: verbose and undo.\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "The undo logic is a system by which the processor can be backed up some\n");
     fprintf(stderr, "number of instructions.  It is off by default.\n");
@@ -62,7 +63,7 @@ extern reg image_ncells;
 int main(int argc, char *argv[])
 {
     char *filename = "/private/tftpboot/FORTH/FORTH.img";
-    int dump;
+    int dump, interactive;
     int quiet;
     char **save_argv;
 
@@ -73,6 +74,7 @@ int main(int argc, char *argv[])
     undo_disable = 1;
     quiet = 1;
     dump = 0;
+    interactive = 0;
 
     argv += 1;
     do {
@@ -97,6 +99,11 @@ int main(int argc, char *argv[])
             argv += 1;
         } else if (strcmp(*argv, "-u") == 0) {
             undo_disable = 0;
+            argv += 1;
+        } else if (strcmp(*argv, "-i") == 0) {
+            interactive = 1;
+            undo_disable = 0;
+            quiet = 0;
             argv += 1;
         } else /* usage() */ ;
     } while (save_argv != argv);
@@ -137,6 +144,11 @@ int main(int argc, char *argv[])
                     if ((i & 3) == 3) printf("\n");
                     else              printf("   ");
                 }
+            }
+            if (interactive) {
+                char command[256]; // Ignored today.  Will parse later.
+                printf("SIM> ");
+                fgets(command, sizeof(command), stdin);
             }
         } while (!sim_done);
     } else {
