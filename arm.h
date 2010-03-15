@@ -36,6 +36,8 @@
 
 reg arm_get_reg(int reg_num);
 void arm_set_reg(int reg_num, reg val);
+void arm_dump_registers(void);
+
 extern char *regs[];
 
 typedef reg arm_cond_t;

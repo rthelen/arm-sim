@@ -127,7 +127,7 @@ int main(int argc, char *argv[])
     arm_set_reg(R0, 0 + addr_base);
 
     if (!dump) {
-        if (!quiet) printf("Initial PC = %8.8x, image_ncells = %x\n", arm_get_reg(PC), image_ncells * 4);
+        if (!quiet) arm_dump_registers();
         sim_done = 0;
         do {
             if (!quiet) {
@@ -137,30 +137,13 @@ int main(int argc, char *argv[])
                 disassemble(arm_get_reg(PC), instr, buff, sz);
                 printf("%8.8x: %8.8x  %s\n", arm_get_reg(PC), instr, buff);
             }
-            if (!execute_one()) break;
-            if (!quiet) {
-                for (int i = 0; i < 16; i++) {
-                    printf("%5s: %8.8x", regs[i], arm_get_reg(i));
-                    if ((i & 3) == 3) printf("\n");
-                    else              printf("   ");
-                }
-                printf("Flags: ");
-                reg flags = arm_get_reg(FLAGS);
-                if (flags & N) printf("N");
-                else           printf("n");
-                if (flags & C) printf("C");
-                else           printf("c");
-                if (flags & V) printf("V");
-                else           printf("v");
-                if (flags & Z) printf("Z");
-                else           printf("z");
-                printf("\n");
-            }
             if (interactive) {
                 char command[256]; // Ignored today.  Will parse later.
                 printf("SIM> ");
                 fgets(command, sizeof(command), stdin);
             }
+            if (!execute_one()) break;
+            if (!quiet) arm_dump_registers();
         } while (!sim_done);
     } else {
         mem_dump(0x80000038, image_ncells - (0x38/4));
