@@ -144,6 +144,17 @@ int main(int argc, char *argv[])
                     if ((i & 3) == 3) printf("\n");
                     else              printf("   ");
                 }
+                printf("Flags: ");
+                reg flags = arm_get_reg(FLAGS);
+                if (flags & N) printf("N");
+                else           printf("n");
+                if (flags & C) printf("C");
+                else           printf("c");
+                if (flags & V) printf("V");
+                else           printf("v");
+                if (flags & Z) printf("Z");
+                else           printf("z");
+                printf("\n");
             }
             if (interactive) {
                 char command[256]; // Ignored today.  Will parse later.
