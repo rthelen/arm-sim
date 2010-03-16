@@ -13,6 +13,9 @@ typedef uint8_t  byte;
 
 int sim_done;
 
+#define FALSE		(0)
+#define TRUE		(!FALSE)
+
 #define MB(x)	((x) << 20)
 #define KB(x)	((x) << 10)
 
