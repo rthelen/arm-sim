@@ -59,8 +59,9 @@ extern reg dodoes_addr;
 extern int undo_disable;
 
 void brkpoint(void);
-
+void debug_if(int flag);
 void warn(const char *fmt, ...);
+void unpredictable(const char *fmt, ...);
 
 void init_memory(reg base, reg size);
 int mem_addr_is_valid(reg addr);

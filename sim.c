@@ -61,7 +61,7 @@ void usage(void)
 extern reg image_ncells;
 int dump, interactive, quiet;
 
-static void debug_if(int f)
+void debug_if(int f)
 {
     if (f) {
         interactive = 1;
@@ -137,7 +137,7 @@ int main(int argc, char *argv[])
         if (!quiet) arm_dump_registers();
         sim_done = 0;
         do {
-            debug_if (arm_get_reg(IP) == 0x80000c70);
+            debug_if (0 /* some condition */);
             if (!quiet) {
                 char buff[256];
                 int sz = sizeof(buff);
