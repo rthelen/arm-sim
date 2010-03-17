@@ -7,25 +7,83 @@
 #include "sim.h"
 #include "arm.h"
 
-#define TF(x)    ((x) ? 1 : 0)
+#define TF(x)    ((x)  ? 1 : 0)
+#define T(x)	 ((x)  ? 1 : 0)
+#define F(x)     (!(x) ? 1 : 0)
 #define CLR(x)   (!TF(x))
 #define SET(x)   ( TF(x))
+#define SIGN(x)  ( TF((x) & (1 << 31)))
 
 void init_execution(void)
 {
     arm_set_reg(FLAGS, 0x0);
 }
 
-static reg barrel_shifter(reg base, reg shift_type, reg shift)
+static reg barrel_shifter(reg is_reg_shift, reg base, reg shift_type, reg shift, reg *carry_out)
 {
+    reg result;
+    reg result_carry;
+
     switch (shift_type) {
-    case 0: base <<= shift;  break;
-    case 1: base >>= shift;  break;
-    case 2: base = (signed) base >> shift; break;
-    case 3: base = (base >> shift) | (base << (32 - shift)); break;
+    case 0:  // LSL
+        if (shift > 32) {
+            result_carry = 0;
+            result = 0;
+        } else if (is_reg_shift || shift > 0) {
+            result_carry = base >> (32-shift);
+            result = base << shift;
+        } else {
+            result = base;
+            result_carry = (arm_get_reg(FLAGS) & C) >> C_SHIFT;
+        }
+        break;
+    case 1:  // LSR
+        if (shift > 32) {
+            result_carry = 0;
+            result = 0;
+        } else if (is_reg_shift || shift > 0) {
+            result_carry = base >> (shift -1);
+            result = base >> shift;
+        } else {
+            result_carry = base >> 31;
+            result = 0;
+        }
+        break;
+    case 2:  // ASR
+        if (shift > 32) {
+            result_carry = base >> 31;
+            result = (signed) base >> 31;
+        } else if (is_reg_shift || shift > 0) {
+            result_carry = base >> (shift -1);
+            result = (signed) base >> shift;
+        } else {
+            result_carry = base >> 31;
+            result = (signed) base >> 31;
+        }
+        break;
+    case 3:  // ROR
+        while (shift > 32) {
+            shift -= 32;
+        }
+        if (is_reg_shift || shift > 0) {
+            result_carry = base >> (shift -1);
+            result = (base >> shift) | (base << (32 - shift));
+        } else {
+            /*
+             * RRX: shift right one bit and insert the carry
+             */
+            reg carry_in = (arm_get_reg(FLAGS) & C) >> C_SHIFT;
+            result = carry_in << 31 | base >> 1;
+            result_carry = base;
+        }
+        break;
     }
 
-    return base;
+    if (carry_out) {
+        *carry_out = result_carry & 1;
+    }
+
+    return result;
 }
 
 static int execute_check_conds(reg conds)
@@ -84,11 +142,13 @@ int execute_callbacks(reg pc)
 {
     undo_record_reg(PC);
     arm_set_reg(PC, arm_get_reg(LR));
-    
+
+    extern int interactive, quiet;
+
     switch (pc) {
     case 1: sim_done = 1; break;
     case 2: io_write(arm_get_reg(R0), arm_get_reg(R1)); break;
-    case 3: arm_set_reg(R0, io_readline(arm_get_reg(R0), arm_get_reg(R1))); break;
+    case 3: arm_set_reg(R0, io_readline(arm_get_reg(R0), arm_get_reg(R1))); interactive = 1; quiet = 0; break;
     }
 
     return 1;
@@ -125,6 +185,7 @@ int execute_one(void)
     reg setconds = IBIT(20);
     reg maddr, offset;
     reg d, n, m;
+    reg c, z, v, nc;
 
     /*
      * Most instructions step forward one instruction
@@ -158,7 +219,7 @@ int execute_one(void)
         } else {
             m = arm_get_reg(rm);
             if (m == PC) m += 4;
-            offset = barrel_shifter(m, shift_type, imm5shift);
+            offset = barrel_shifter(FALSE, m, shift_type, imm5shift, NULL);
         }
 
         maddr = arm_get_reg(rn);
@@ -178,7 +239,7 @@ int execute_one(void)
             if (up_down) offset =  imm12bit;
             else         offset = -imm12bit;
         } else {
-            offset = barrel_shifter(arm_get_reg(rm), shift_type, imm5shift);
+            offset = barrel_shifter(FALSE, arm_get_reg(rm), shift_type, imm5shift, NULL);
         }
 
         maddr = arm_get_reg(rn);
@@ -256,38 +317,49 @@ int execute_one(void)
             setconds = 1;
         }
 
+        reg flags = arm_get_reg(FLAGS);
         n = arm_get_reg(rn);
         if (rn == PC) n += 4;
 
         if (IBIT(25)) {
             m = imm8bit << (imm_rot << 1);
+            if (imm_rot > 0) {
+                nc = (imm8bit << ((imm_rot << 1) -1)) >> 31;
+            } else {
+                nc = imm8bit & 1;  // XXX: Is this right? 
+            }
         } else {
             m = arm_get_reg(rm);
-            if (rm == PC) m += 4;
             if (!IBIT(4)) {
-                m = barrel_shifter(m, shift_type, imm5shift);
+                if (rm == PC) m += 4;
+                m = barrel_shifter(FALSE, m, shift_type, imm5shift, &nc);
             } else {
-                m = barrel_shifter(m, shift_type, arm_get_reg(rs) & 31);
+                if (rm == PC) m += 8;
+                reg s = arm_get_reg(rs);
+                if (rs == PC) s += 8;
+                s &= 0xFF;  // Only one byte of register is used
+                m = barrel_shifter(TRUE, m, shift_type, s, &nc);
             }
         }
 
+        c = (arm_get_reg(FLAGS) & C) >> C_SHIFT;
         switch (op) {
-        case ARM_INSTR_AND: d = n &  m; break;
-        case ARM_INSTR_EOR: d = n ^  m; break;
-        case ARM_INSTR_SUB: d = n + ~m + 1; break;
-        case ARM_INSTR_RSB: d = m + ~n + 1; break;
-        case ARM_INSTR_ADD: d = n +  m; break;
-        case ARM_INSTR_ADC: d = n +  m + TF(arm_get_reg(FLAGS) & C); break;
-        case ARM_INSTR_SBC: d = n + ~m + TF(arm_get_reg(FLAGS) & C); break;
-        case ARM_INSTR_RSC: d = m + ~n + TF(arm_get_reg(FLAGS) & C); break;
-        case ARM_INSTR_TST: d = n &  m; break;
-        case ARM_INSTR_TEQ: d = n ^  m; break;
-        case ARM_INSTR_CMP: d = n + ~m + 1; break;
-        case ARM_INSTR_CMN: d = n +  m; break;
-        case ARM_INSTR_ORR: d = n |  m; break;
-        case ARM_INSTR_MOV: d =  m; break;
-        case ARM_INSTR_BIC: d = n & ~m; break;
-        case ARM_INSTR_MVN: d = ~m; break;
+        case ARM_INSTR_AND:             d = n & m; break;
+        case ARM_INSTR_EOR:             d = n ^ m; break;
+        case ARM_INSTR_SUB: m = ~m + 1; d = n + m; break;
+        case ARM_INSTR_RSB: n = ~n + 1; d = m + n; break;
+        case ARM_INSTR_ADD:             d = n + m; break;
+        case ARM_INSTR_ADC: m =  m + c; d = n + m; break;
+        case ARM_INSTR_SBC: m = ~m + c; d = n + m; break;
+        case ARM_INSTR_RSC: n = ~n + c; d = m + n; break;
+        case ARM_INSTR_TST:             d = n & m; break;
+        case ARM_INSTR_TEQ:             d = n ^ m; break;
+        case ARM_INSTR_CMP: m = ~m + 1; d = n + m; break;
+        case ARM_INSTR_CMN:             d = n + m; break;
+        case ARM_INSTR_ORR:             d = n | m; break;
+        case ARM_INSTR_MOV:             d =     m; break;
+        case ARM_INSTR_BIC: m = ~m;     d = n & m; break;
+        case ARM_INSTR_MVN: m = ~m;     d =     m; break;
         default: break;
         }
 
@@ -303,9 +375,15 @@ int execute_one(void)
             if (setconds && rd != PC) {
                 undo_record_reg(FLAGS);
                 // V := V
+                v = (flags & V) >> V_SHIFT;
                 // C := carry out from the barrel shifter, or C if shift is LSL #0
+                c = nc;  // LSL #0 handled by barrel shift logic
                 // Z := if d == 0
+                z = d == 0;
                 // N := if d & (1<<31)
+                n = SIGN(d);
+
+                arm_set_reg(FLAGS, z << Z_SHIFT | v << V_SHIFT | n << N_SHIFT | c << C_SHIFT);
             }
             break;
 
@@ -319,10 +397,32 @@ int execute_one(void)
         case ARM_INSTR_CMN:
             if (setconds && rd != PC) {
                 undo_record_reg(FLAGS);
-                // V := if overflow occurs into bit 31
+                if (!SIGN(n ^ m)) {
+                    /*
+                     * If the signs of the two operands are the same, then
+                     * the overflow bit is set when the result has a sign
+                     * different from either of the operands.
+                     */
+                    v = TF(SIGN(d ^ m));
+                } else {
+                    /*
+                     * If the signs of the two operands are different, then
+                     * there isn't any possibility of an overflow.
+                     */
+                    v = 0;
+                }
                 // C := carry out of the ALU
+                if (SIGN(n | m)) {
+                    c = !(SIGN(d));
+                } else {
+                    c = 0;
+                }
                 // Z := if d == 0
+                z = d == 0;
                 // N := if d & (1<<31)
+                n = TF(SIGN(d));
+
+                arm_set_reg(FLAGS, z << Z_SHIFT | v << V_SHIFT | n << N_SHIFT | c << C_SHIFT);
             }
             break;
         default: break;
