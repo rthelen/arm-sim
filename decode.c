@@ -30,23 +30,13 @@ arm_instr_t arm_decode_instr(reg instr)
 
     if (IBITS(25,3) == 2) {
         /* Load/Store 12bit imm */
-        if (IBIT(20)) {
-            if (IBIT(22))  return (ARM_INSTR_LDB);
-            else           return (ARM_INSTR_LDR);
-        } else {
-            if (IBIT(22))  return (ARM_INSTR_STB);
-            else           return (ARM_INSTR_STR);
-        }
+        if (IBIT(20))      return (ARM_INSTR_LDR);
+        else               return (ARM_INSTR_STR);
     }
     
     if (IBITS(25,3) == 3 && !IBIT(4)) {
-        if (IBIT(20)) {
-            if (IBIT(22))  return (ARM_INSTR_LDB);
-            else           return (ARM_INSTR_LDR);
-        } else {
-            if (IBIT(22))  return (ARM_INSTR_STB);
-            else           return (ARM_INSTR_STR);
-        }
+        if (IBIT(20))      return (ARM_INSTR_LDR);
+        else               return (ARM_INSTR_STR);
     }
 
     if (!IBITS(25,3) && IBIT(7) && IBIT(4)) {

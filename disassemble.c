@@ -172,8 +172,6 @@ void disassemble(reg addr, reg instr, char *buff, int sz)
 
     case ARM_INSTR_STR:
     case ARM_INSTR_LDR:
-    case ARM_INSTR_STB:
-    case ARM_INSTR_LDB:
         print_mnemonic(buff, sz, "%s%s%s",
                        IBIT(20) ? "ldr" : "str",
                        conds[cond],
@@ -192,13 +190,13 @@ void disassemble(reg addr, reg instr, char *buff, int sz)
                 snprintf(temp2, t2sz, ", %s", regs[rm]);
             }
         }
-        if (op == ARM_INSTR_LDR && rn == 15 && !IBIT(25)) {
+        if (!IBIT(22) && rn == 15 && !IBIT(25)) {
             reg t;
             if (!up_down) t = -imm12bit;
             else          t =  imm12bit;
             reg v = mem_load(addr + 8 + t, 0);
             snprintf(temp3, t3sz, ";  # %#8.8x", v);
-        } else if (op == ARM_INSTR_LDB && rn == 15 && !IBIT(25)) {
+        } else if (IBIT(22) && rn == 15 && !IBIT(25)) {
             reg t;
             if (!up_down) t = -imm12bit;
             else          t =  imm12bit;

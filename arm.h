@@ -77,8 +77,7 @@ typedef enum {
 
     ARM_INSTR_STR,
     ARM_INSTR_LDR,
-    ARM_INSTR_STB,
-    ARM_INSTR_LDB,
+
     ARM_INSTR_LDSH,
     ARM_INSTR_LDSB,
     ARM_INSTR_LDUH,
