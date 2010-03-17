@@ -77,6 +77,9 @@ static reg barrel_shifter(reg is_reg_shift, reg base, reg shift_type, reg shift,
             result_carry = base;
         }
         break;
+    default:
+        result_carry = 0;
+        result = 0;
     }
 
     if (carry_out) {
@@ -138,17 +141,19 @@ reg post_inc(reg addr, int pre_post, int up_down)
     else           return addr - 4;
 }
 
+extern int interactive, quiet;
+
 int execute_callbacks(reg pc)
 {
     undo_record_reg(PC);
     arm_set_reg(PC, arm_get_reg(LR));
 
-    extern int interactive, quiet;
-
     switch (pc) {
     case 1: sim_done = 1; break;
     case 2: io_write(arm_get_reg(R0), arm_get_reg(R1)); break;
-    case 3: arm_set_reg(R0, io_readline(arm_get_reg(R0), arm_get_reg(R1))); interactive = 1; quiet = 0; break;
+    case 3: arm_set_reg(R0, io_readline(arm_get_reg(R0), arm_get_reg(R1))); debug_if(0); break;
+    case 4: warn("GETFILE unimplemented"); break;
+    case 5: /* Nothing to do for sync caches */ break;
     }
 
     return 1;
@@ -158,7 +163,7 @@ int execute_one(void)
 {
     reg pc = arm_get_reg(PC);
 
-    if (pc > 0 && pc < 4) {
+    if (pc > 0 && pc < 6) {
         return execute_callbacks(pc);
     }
 
@@ -226,7 +231,11 @@ int execute_one(void)
         if (rn == PC) maddr += 4;
         if (pre_post) maddr += offset;
         undo_record_reg(rd);
-        arm_set_reg(rd, mem_load(maddr, 0));
+        if (!IBIT(22)) {
+            arm_set_reg(rd, mem_load(maddr, 0));
+        } else {
+            arm_set_reg(rd, mem_loadb(maddr, 0));
+        }
         if (write_back || !pre_post) {
             if (!pre_post) maddr += offset;
             undo_record_reg(rn);
@@ -239,6 +248,8 @@ int execute_one(void)
             if (up_down) offset =  imm12bit;
             else         offset = -imm12bit;
         } else {
+            m = arm_get_reg(rm);
+            if (m == PC) m += 4;
             offset = barrel_shifter(FALSE, arm_get_reg(rm), shift_type, imm5shift, NULL);
         }
 
@@ -246,7 +257,11 @@ int execute_one(void)
         if (rn == PC) maddr += 4;
         if (pre_post) maddr += offset;
         undo_record_memory(maddr);
-        mem_store(maddr, 0, arm_get_reg(rd));
+        if (!IBIT(22)) {
+            mem_store(maddr, 0, arm_get_reg(rd));
+        } else {
+            mem_storeb(maddr, 0, arm_get_reg(rd));
+        }
         if (write_back || !pre_post) {
             if (!pre_post) maddr += offset;
             undo_record_reg(rn);
@@ -284,6 +299,8 @@ int execute_one(void)
             if (IBIT(rm)) {
                 maddr = pre_inc(maddr, pre_post, up_down);
                 undo_record_memory(maddr);
+                reg m = arm_get_reg(rm);
+                if (rm == PC) m += 8;
                 mem_store(maddr, 0, arm_get_reg(rm));
                 maddr = post_inc(maddr, pre_post, up_down);
             }
@@ -344,22 +361,22 @@ int execute_one(void)
 
         c = (arm_get_reg(FLAGS) & C) >> C_SHIFT;
         switch (op) {
-        case ARM_INSTR_AND:             d = n & m; break;
-        case ARM_INSTR_EOR:             d = n ^ m; break;
-        case ARM_INSTR_SUB: m = ~m + 1; d = n + m; break;
-        case ARM_INSTR_RSB: n = ~n + 1; d = m + n; break;
-        case ARM_INSTR_ADD:             d = n + m; break;
-        case ARM_INSTR_ADC: m =  m + c; d = n + m; break;
-        case ARM_INSTR_SBC: m = ~m + c; d = n + m; break;
-        case ARM_INSTR_RSC: n = ~n + c; d = m + n; break;
-        case ARM_INSTR_TST:             d = n & m; break;
-        case ARM_INSTR_TEQ:             d = n ^ m; break;
-        case ARM_INSTR_CMP: m = ~m + 1; d = n + m; break;
-        case ARM_INSTR_CMN:             d = n + m; break;
-        case ARM_INSTR_ORR:             d = n | m; break;
-        case ARM_INSTR_MOV:             d =     m; break;
-        case ARM_INSTR_BIC: m = ~m;     d = n & m; break;
-        case ARM_INSTR_MVN: m = ~m;     d =     m; break;
+        case ARM_INSTR_AND:         d = n & m    ; break;
+        case ARM_INSTR_EOR:         d = n ^ m    ; break;
+        case ARM_INSTR_SUB: m = ~m; d = n + m + 1; break;
+        case ARM_INSTR_RSB: n = ~n; d = m + n + 1; break;
+        case ARM_INSTR_ADD:         d = n + m    ; break;
+        case ARM_INSTR_ADC: m =  m; d = n + m + c; break;
+        case ARM_INSTR_SBC: m = ~m; d = n + m + c; break;
+        case ARM_INSTR_RSC: n = ~n; d = m + n + c; break;
+        case ARM_INSTR_TST:         d = n & m    ; break;
+        case ARM_INSTR_TEQ:         d = n ^ m    ; break;
+        case ARM_INSTR_CMP: m = ~m; d = n + m + 1; break;
+        case ARM_INSTR_CMN:         d = n + m    ; break;
+        case ARM_INSTR_ORR:         d = n | m    ; break;
+        case ARM_INSTR_MOV:         d =     m    ; break;
+        case ARM_INSTR_BIC: m = ~m; d = n & m    ; break;
+        case ARM_INSTR_MVN: m = ~m; d =     m    ; break;
         default: break;
         }
 
@@ -450,6 +467,7 @@ int execute_one(void)
 
     default:
         undo_finish_instr();
+        warn("Unimplemented instruction: %8.8x", instr);
         return 0;
     }
 
