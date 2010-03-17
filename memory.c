@@ -37,10 +37,12 @@ void *memory_range(reg arm_addr, reg arm_size)
 {
     if (arm_addr < addr_base) {
         warn("simulator address %p outside of memory range", arm_addr);
+        return 0;
     }
 
     if (arm_addr + arm_size >= addr_base + addr_size) {
         warn("simulator range (%p + %d) outside of memory range", arm_addr, arm_size);
+        return 0;
     }
 
     return memory + (arm_addr - addr_base);
@@ -80,7 +82,7 @@ reg mem_load(reg arm_addr, reg arm_offset)
 
 void mem_storeb(reg arm_addr, reg arm_offset, byte val)
 {
-    reg *addr = mem_addr(arm_addr + arm_offset, 1);
+    byte *addr = (byte *) mem_addr(arm_addr + arm_offset, 1);
 
     if (addr) {
         *addr = val;
@@ -89,7 +91,7 @@ void mem_storeb(reg arm_addr, reg arm_offset, byte val)
 
 byte mem_loadb(reg arm_addr, reg arm_offset)
 {
-    reg *addr = mem_addr(arm_addr + arm_offset, 1);
+    byte *addr = (byte *) mem_addr(arm_addr + arm_offset, 1);
 
     if (addr) {
         return *addr;
