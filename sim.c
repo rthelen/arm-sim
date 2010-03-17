@@ -59,12 +59,19 @@ void usage(void)
 }
 
 extern reg image_ncells;
+int dump, interactive, quiet;
+
+static void debug_if(int f)
+{
+    if (f) {
+        interactive = 1;
+        quiet = 0;
+    }
+}
 
 int main(int argc, char *argv[])
 {
     char *filename = "/private/tftpboot/FORTH/FORTH.img";
-    int dump, interactive;
-    int quiet;
     char **save_argv;
 
     prog_name = argv[0];
@@ -130,6 +137,7 @@ int main(int argc, char *argv[])
         if (!quiet) arm_dump_registers();
         sim_done = 0;
         do {
+            debug_if (arm_get_reg(IP) == 0x80000c70);
             if (!quiet) {
                 char buff[256];
                 int sz = sizeof(buff);
@@ -145,6 +153,7 @@ int main(int argc, char *argv[])
             if (!execute_one()) break;
             if (!quiet) arm_dump_registers();
         } while (!sim_done);
+        printf("Simulator terminated with sim_done == TRUE\n");
     } else {
         mem_dump(0x80000038, image_ncells - (0x38/4));
     }

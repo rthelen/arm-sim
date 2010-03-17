@@ -4,9 +4,13 @@
 #define R2  2
 #define R3  3
 #define R4  4
+#define IP  R4
 #define R5  5
+#define RP	R5
 #define R6  6
+#define TOP R6
 #define R7  7
+#define COUNT R7
 #define R8  8
 #define R9  9
 #define R10 10
