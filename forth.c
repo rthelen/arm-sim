@@ -42,6 +42,7 @@ typedef struct forth_params_s {
     cell            key_cb;         // Write
     cell            readline_cb;    // Write
     cell            getfile_cb;     // Write
+    cell            sync_caches_cb; // Write
 } forth_params_t;
 
 
@@ -168,6 +169,8 @@ reg forth_init(reg base)
     mem_store(base, offsetof(forth_params_t, exit_func), 1);
     mem_store(base, offsetof(forth_params_t, type_cb), 2);
     mem_store(base, offsetof(forth_params_t, readline_cb), 3);
+    mem_store(base, offsetof(forth_params_t, getfile_cb), 4);
+    mem_store(base, offsetof(forth_params_t, sync_caches_cb), 5);
 #endif
 
     return mem_load(base, offsetof(forth_params_t, entry));
