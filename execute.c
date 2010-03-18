@@ -377,7 +377,7 @@ int execute_one(void)
         case ARM_INSTR_MOV:         d =     m    ; break;
         case ARM_INSTR_BIC: m = ~m; d = n & m    ; break;
         case ARM_INSTR_MVN: m = ~m; d =     m    ; break;
-        default: break;
+        default:                    d =0xEEBADADD; break;
         }
 
         switch (op) {
