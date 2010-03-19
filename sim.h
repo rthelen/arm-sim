@@ -97,6 +97,7 @@ reg forth_is_string(reg addr);
 
 void io_write(reg str, reg len);
 reg io_readline(reg buffer, reg len);
+reg io_readfile(reg filename, reg len);
 
 void undo_record_reg(int reg_num);
 void undo_record_flags(void);

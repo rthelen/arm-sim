@@ -1,5 +1,34 @@
 #include "sim.h"
 
+reg io_readfile(reg filename, reg len)
+{
+    char *basename = "/private/tftpboot/FORTH/";
+    char *s = malloc(strlen(basename) + len + 1);
+    char *p = s;
+    for (int j = 0; j < strlen(basename); j++) {
+        *p++ = basename[j];
+    }
+    for (int i = 0; i < len; i++) {
+        *p++ = mem_loadb(filename, i);
+    }
+    *p = '\0';
+
+    file_t *f = file_load(s);
+
+    if (!f) return 0;
+
+    static reg getfiles = GB(2) + MB(16);
+
+    reg fp = getfiles;
+    mem_store(getfiles, 0, f->image_size);
+    getfiles += 4;
+
+    file_put_in_memory(f, getfiles);
+    getfiles += (f->image_size + 63) & ~63;
+
+    return fp;
+}
+
 void io_write(reg str, reg len)
 {
     char *s;

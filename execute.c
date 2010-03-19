@@ -152,7 +152,7 @@ int execute_callbacks(reg pc)
     case 1: sim_done = 1; break;
     case 2: io_write(arm_get_reg(R0), arm_get_reg(R1)); break;
     case 3: arm_set_reg(R0, io_readline(arm_get_reg(R0), arm_get_reg(R1))); debug_if(0); break;
-    case 4: warn("GETFILE unimplemented"); break;
+    case 4: arm_set_reg(R0, io_readfile(arm_get_reg(R0), arm_get_reg(R1))); break;
     case 5: /* Nothing to do for sync caches */ break;
     }
 
