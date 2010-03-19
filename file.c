@@ -12,7 +12,7 @@ file_t *file_load(char *file_name)
     file->image = NULL;
     file->image_size = 0;
     file->base = 0;
-    file->size99 = 0;
+    file->size = 0;
 
     file->fp = fopen(file->name, "r");
     if (!file->fp) {
