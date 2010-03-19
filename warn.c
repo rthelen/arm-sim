@@ -13,6 +13,19 @@ void unpredictable(const char *fmt, ...)
     arm_dump_registers();
 }
 
+void error(const char *fmt, ...)
+{
+    va_list ap;
+
+    printf("Error: ");
+    va_start(ap, fmt);
+    vprintf(fmt, ap);
+    va_end(ap);
+    printf("\n");
+    arm_dump_registers();
+    exit(-1);
+}
+
 void warn(const char *fmt, ...)
 {
     va_list ap;
