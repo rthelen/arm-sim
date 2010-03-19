@@ -74,6 +74,17 @@ reg mem_load(reg arm_addr, reg arm_offset);
 byte mem_loadb(reg arm_addr, reg arm_offset);
 void mem_dump(reg arm_addr, reg arm_numwords);
 
+typedef struct file_s {
+    FILE *fp;
+    char *name;
+    byte *image;
+    size_t size;
+} file_t;
+
+file_t *file_load(char *fname);
+void file_free(file_t *file);
+void file_put_in_memory(file_t *file, reg base);
+
 int image_load(char *fname);
 
 int forth_parse_image(void);
