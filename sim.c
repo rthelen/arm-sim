@@ -76,8 +76,6 @@ int main(int argc, char *argv[])
 
     prog_name = argv[0];
 
-    init_memory(0x80000000, MB(16));
-
     undo_disable = 1;
     quiet = 1;
     dump = 0;
@@ -115,23 +113,13 @@ int main(int argc, char *argv[])
         } else /* usage() */ ;
     } while (save_argv != argv);
 
-    if (image_load(filename)) {
-        fprintf(stderr, "ERROR: Couldn't load image %s\n", filename);
-        exit(-1);
-    }
+    memory_more(GB(2), MB(20));
 
-    if (forth_parse_image()) {
-        fprintf(stderr, "ERROR: Kernel image appears incorrect\n");
-        exit(-1);
-    }
+    file_t *forth_image = forth_init(filename, GB(2), MB(16));
+    reg pc = forth_entry(forth_image);
 
-    if (forth_relocate_image(0)) {
-        fprintf(stderr, "ERROR: Kernel image failed relocation\n");
-        exit(-1);
-    }
-
-    arm_set_reg(PC, forth_init(0));
-    arm_set_reg(R0, 0 + addr_base);
+    arm_set_reg(PC, pc);
+    arm_set_reg(R0, GB(2));
 
     if (!dump) {
         if (!quiet) arm_dump_registers();
@@ -155,10 +143,8 @@ int main(int argc, char *argv[])
         } while (!sim_done);
         printf("Simulator terminated with sim_done == TRUE\n");
     } else {
-        mem_dump(0x80000038, image_ncells - (0x38/4));
+        mem_dump(forth_image->base + 0x38, (forth_image->size - 0x38)/4);
     }
 
     return 0;
 }
-
-

@@ -1,51 +1,83 @@
 #include "sim.h"
 #include "arm.h"
 
-byte *memory;
+typedef struct memory_s {
+    byte *memory;
+    reg base, end, size;
+} memory_t;
 
-reg addr_base;
-reg addr_size;
+#define MAX_NUM_RANGES		5
+static int num_mem_ranges;
+static memory_t mem_range[MAX_NUM_RANGES];
 
-void init_memory(reg base, reg size)
+#define WITHIN(a, s, e) (((a) >= (s)) && ((a) < (e)))
+
+void memory_more(reg base, reg size)
 {
-    memory = malloc(size);
-    assert(memory);
+    for (int i = 0; i < num_mem_ranges; i++) {
+        memory_t *p = &mem_range[i];
+        reg end = base + size;
+        if (WITHIN(base, p->base, p->end) ||
+            WITHIN(end,  p->base, p->end) ||
+            (base <  p->base && end  >= p->end)) {
+            error("Overlapping memory region: new region %8.8x - %8.8x; existing overlapping region %8.8x - %8.8x",
+                  base, end, p->base, p->end);
+        }
+    }
 
-    addr_base = base;
-    addr_size = size;
+    if (num_mem_ranges >= MAX_NUM_RANGES) {
+        error("Out of memory ranges");
+    }
 
-    bzero(memory, size);
+    memory_t *m = &mem_range[num_mem_ranges++];
+
+    m->memory = malloc(size);
+    assert(m->memory);
+
+    m->base = base;
+    m->end  = base + size;
+    m->size = size;
+
+    bzero(m->memory, size);
 }
 
 int mem_addr_is_valid(reg arm_addr)
 {
-    if (arm_addr < addr_base) return 0;
-    if (arm_addr >= addr_base + addr_size) return 0;
+    for (int i = 0; i < num_mem_ranges; i++) {
+        memory_t *p = &mem_range[i];
+        if (WITHIN(arm_addr, p->base, p->end)) return 1;
+    }
+    return 0;
+}
+
+static int mem_range_index(reg base, reg size)
+{
+    reg end = base + size;
+    for (int i = 0; i < num_mem_ranges; i++) {
+        memory_t *p = &mem_range[i];
+        if (WITHIN(base, p->base, p->end) &&
+            WITHIN(end,  p->base, p->end))
+            return i;
+    }
+    return -1;
+}
+
+int mem_range_is_valid(reg base, reg size)
+{
+    if (mem_range_index(base, size) == -1)
+        return 0;
     return 1;
 }
 
-int mem_range_is_valid(reg arm_addr, reg size)
+void *memory_range(reg base, reg size)
 {
-    if (arm_addr < addr_base) return 0;
-    if (arm_addr + size < addr_base) return 0;
-    if (arm_addr > addr_base + addr_size) return 0;
-    if (arm_addr + size >= addr_base + addr_size) return 0;
-    return 1;
-}
-
-void *memory_range(reg arm_addr, reg arm_size)
-{
-    if (arm_addr < addr_base) {
-        warn("simulator address %p outside of memory range", arm_addr);
-        return 0;
+    int i = mem_range_index(base, size);
+    if (i < 0) {
+        warn("simulator address %p outside of memory range", base);
+        return NULL;
     }
 
-    if (arm_addr + arm_size >= addr_base + addr_size) {
-        warn("simulator range (%p + %d) outside of memory range", arm_addr, arm_size);
-        return 0;
-    }
-
-    return memory + (arm_addr - addr_base);
+    return mem_range->memory + (base - mem_range[i].base);
 }
 
 static reg *mem_addr(reg arm_addr, reg arm_size)

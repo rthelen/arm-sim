@@ -3,20 +3,9 @@
 
 typedef reg	cell;
 
-typedef void (*forth_type_cb)(char *str, cell len);
-typedef cell (*forth_key_cb)(void);
-typedef cell (*forth_readline_cb)(char *buffer, cell len);
-typedef char *(*forth_getfile_cb)(char *str, cell len);
-typedef void (*forth_entry)(void *base);
-
 /*
  * Layout of the FORTH kernel image
  */
-
-cell image_ncells;  // Cells
-cell reloc_ncells;  // Cells
-cell *kernel_image;
-cell *reloc_bitmap;
 
 reg dovar_addr;
 reg docolon_addr;
@@ -84,45 +73,43 @@ static char *forth_lookup_word_name(reg cfa)
     return str;
 }
 
-int forth_parse_image(void)
+file_t *forth_init(char *filename, reg base, reg size)
 {
+    file_t *forth_file;
     cell *fimage;
-
-    if (!image || image_size < sizeof(cell) * 4) {
-        return -1;
-    }
-
-    fimage = (cell *) image;
-    image_ncells = fimage[0];
-    reloc_ncells = fimage[1];
-
-    if (image_size < sizeof(cell) * (2 + image_ncells + reloc_ncells)) {
-        return -1;
-    }
-
-    kernel_image = &fimage[2];
-    reloc_bitmap = &fimage[2 + image_ncells];
-
-    return 0;
-}
-
-int forth_relocate_image(reg base)
-{
     int fsize;
+    cell kernel_ncells;  // Cells
+    cell reloc_ncells;  // Cells
+    cell *kernel_image;
+    cell *reloc_bitmap;
 
-    fsize = image_ncells * 4;
-
-    if (addr_size < (fsize + base)) {
-        printf("ERROR: The Forth image is larger than the region alotted for it.\n");
-        return -1;
+    forth_file = file_load(filename);
+    if (!forth_file) {
+        error("Couldn't load image %s", filename);
     }
 
-    base = base + addr_base;
+    if (forth_file->image_size < sizeof(cell) * 4) {
+        error("Forth image is smaller than the Forth image header, %d bytes", sizeof(cell) * 4);
+    }
+
+    forth_file->base = base;
+    fimage = (cell *) forth_file->image;
+    kernel_ncells =  fimage[0];
+    reloc_ncells =  fimage[1];
+    kernel_image = &fimage[2];
+    reloc_bitmap = &fimage[2 + kernel_ncells];
+
+    fsize = kernel_ncells * 4;
+    forth_file->size = fsize;
+
+    if (size < fsize) {
+        error("The Forth image is larger than the region alotted for it.");
+    }
 
     forth_params_t *fp = (forth_params_t *) kernel_image;
 
     if (fp->version != 1) {
-        return -1;
+        error("The Forth image isn't compatible with this version of the simulator");
     }
 
     int offset = 0;
@@ -130,15 +117,8 @@ int forth_relocate_image(reg base)
     for (int i = 0; i < reloc_ncells; i++) {
         cell bits = reloc_bitmap[i];
         for (int j = 0; j < 32; j++) {
-            cell adj;
-            if (bits & 1) {
-                adj = addr_base;
-            } else {
-                adj = 0;
-            }
-
-            mem_store(base, offset, *p++ + adj);
-
+            mem_store(base, offset, *p + ((bits & 1) ? base : 0));
+            p ++;
             offset += 4;
             bits >>= 1;
         }
@@ -147,33 +127,24 @@ int forth_relocate_image(reg base)
 //  fp->sp0 = (void *) ((uintptr_t) base + size - (uintptr_t) fp->rp0 - 32);
 //  fp->rp0 = (void *) ((uintptr_t) base + size - 32);
 
-    mem_store(base, offsetof(forth_params_t, sp0), 
-              addr_base + addr_size - mem_load(base, offsetof(forth_params_t, rp0)) - 32);
-    mem_store(base, offsetof(forth_params_t, rp0), addr_base + addr_size - 32);
-
-    return 0;
-}
-
-reg forth_init(reg base)
-{
-#if 0
-    forth_params_t *fp = (void *) image;
-
-    fp->exit_context = jmpbuf;
-    fp->exit_func = lib_longjmp;
-    fp->type_cb = forth_type;
-    fp->readline_cb = forth_readline;
-#else
-    base += addr_base;
+    cell rp_size = mem_load(base, offsetof(forth_params_t, rp0));
+    mem_store(base, offsetof(forth_params_t, sp0), base + size - rp_size - 32);
+    mem_store(base, offsetof(forth_params_t, rp0), base + size - 32);
     mem_store(base, offsetof(forth_params_t, exit_context), 0);
     mem_store(base, offsetof(forth_params_t, exit_func), 1);
     mem_store(base, offsetof(forth_params_t, type_cb), 2);
     mem_store(base, offsetof(forth_params_t, readline_cb), 3);
     mem_store(base, offsetof(forth_params_t, getfile_cb), 4);
     mem_store(base, offsetof(forth_params_t, sync_caches_cb), 5);
-#endif
 
-    return mem_load(base, offsetof(forth_params_t, entry));
+    return forth_file;
+}
+
+reg forth_entry(file_t *file)
+{
+    reg pc = mem_load(file->base, offsetof(forth_params_t, entry));
+
+    return pc;
 }
 
 reg forth_is_header(reg arm_addr)

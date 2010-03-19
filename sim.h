@@ -16,6 +16,7 @@ int sim_done;
 #define FALSE		(0)
 #define TRUE		(!FALSE)
 
+#define GB(x)	((x) << 30)
 #define MB(x)	((x) << 20)
 #define KB(x)	((x) << 10)
 
@@ -45,12 +46,6 @@ int sim_done;
 
 extern byte *memory;
 
-extern reg addr_base;
-extern reg addr_size;
-
-extern byte *image;
-extern int image_size;
-
 extern reg dovar_addr;
 extern reg docolon_addr;
 extern reg docons_addr;
@@ -64,7 +59,13 @@ void warn(const char *fmt, ...);
 void error(const char *fmt, ...);
 void unpredictable(const char *fmt, ...);
 
-void init_memory(reg base, reg size);
+void memory_more(reg base, reg size);
+reg mem_ram_base(void);
+reg mem_ram_size(void);
+void mem_set_image_size(int image_size);
+void mem_set_image_base(reg base);
+reg  mem_image_base(void);
+reg mem_image_size(void);
 int mem_addr_is_valid(reg addr);
 int mem_range_is_valid(reg arm_addr, reg size);
 void *memory_range(reg arm_addr, reg arm_size);
@@ -78,18 +79,18 @@ typedef struct file_s {
     FILE *fp;
     char *name;
     byte *image;
-    size_t size;
+    size_t image_size;
+    reg base;
+    reg size;
 } file_t;
 
 file_t *file_load(char *fname);
 void file_free(file_t *file);
 void file_put_in_memory(file_t *file, reg base);
 
-int image_load(char *fname);
+file_t *forth_init(char *filename, reg base, reg size);
+reg forth_entry(file_t *file);
 
-int forth_parse_image(void);
-int forth_relocate_image(reg base);
-reg forth_init(reg base);
 reg forth_is_header(reg arm_addr);
 reg forth_is_word(reg addr);
 reg forth_is_string(reg addr);

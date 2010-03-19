@@ -7,10 +7,12 @@ file_t *file_load(char *file_name)
     file = malloc(sizeof(file_t));
     if (!file) return NULL;
 
+    file->name = file_name;
     file->fp = NULL;
     file->image = NULL;
-    file->size = 0;
-    file->name = file_name;
+    file->image_size = 0;
+    file->base = 0;
+    file->size99 = 0;
 
     file->fp = fopen(file->name, "r");
     if (!file->fp) {
@@ -21,16 +23,16 @@ file_t *file_load(char *file_name)
         goto err;
     }
 
-    file->size = ftell(file->fp);
+    file->image_size = ftell(file->fp);
 
-    file->image = malloc(file->size);
+    file->image = malloc(file->image_size);
     ASSERT(file->image);
 
     if (fseek(file->fp, 0, SEEK_SET)) {
         goto err;
     }
 
-    if (!fread(file->image, 1, file->size, file->fp)) {
+    if (!fread(file->image, 1, file->image_size, file->fp)) {
         goto err;
     }
 
@@ -46,7 +48,9 @@ err:
 
 void file_put_in_memory(file_t *file, reg base)
 {
-    for (int i = 0; i < file->size; i++) {
+    file->base = base;
+
+    for (int i = 0; i < file->image_size; i++) {
         mem_storeb(base, i, file->image[i]);
     }
 }
