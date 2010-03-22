@@ -191,6 +191,7 @@ int execute_one(void)
     reg maddr, offset;
     reg d, n, m;
     reg c, z, v, nc;
+    reg step;
 
     /*
      * Most instructions step forward one instruction
@@ -275,7 +276,14 @@ int execute_one(void)
             undo_record_reg(rn);
         }
 
-        for (rm = 0; rm < 16; rm++) {
+        if (up_down) {
+            rm = 0;
+            step = 1;
+        } else {
+            rm = 15;
+            step = -1;
+        }
+        for (reg count = 0; count < 16; count++, rm += step) {
             if (IBIT(rm)) {
                 maddr = pre_inc(maddr, pre_post, up_down);
                 if (rm != rn || !write_back) undo_record_reg(rm);
@@ -295,7 +303,14 @@ int execute_one(void)
             undo_record_reg(rn);
         }
 
-        for (rm = 0; rm < 16; rm++) {
+        if (up_down) {
+            rm = 0;
+            step = 1;
+        } else {
+            rm = 15;
+            step = -1;
+        }
+        for (reg count = 0; count < 16; count++, rm += step) {
             if (IBIT(rm)) {
                 maddr = pre_inc(maddr, pre_post, up_down);
                 undo_record_memory(maddr);
