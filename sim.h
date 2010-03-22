@@ -91,9 +91,12 @@ void file_put_in_memory(file_t *file, reg base);
 file_t *forth_init(char *filename, reg base, reg size);
 reg forth_entry(file_t *file);
 
+char *forth_lookup_word_name(reg cfa);
 reg forth_is_header(reg arm_addr);
 reg forth_is_word(reg addr);
 reg forth_is_string(reg addr);
+void forth_backtrace(void);
+void forth_show_stack(void);
 
 void io_write(reg str, reg len);
 reg io_readline(reg buffer, reg len);

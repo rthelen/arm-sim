@@ -54,4 +54,7 @@ void arm_dump_registers(void)
     if (flags & Z) printf("Z");
     else           printf("z");
     printf("\n");
+    forth_backtrace();
+    forth_show_stack();
+
 }

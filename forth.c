@@ -7,6 +7,8 @@ typedef reg	cell;
  * Layout of the FORTH kernel image
  */
 
+static cell sp0, rp0;
+
 reg dovar_addr;
 reg docolon_addr;
 reg docons_addr;
@@ -37,8 +39,28 @@ typedef struct forth_params_s {
 
 cell forth_readline(char *buffer, cell len);
 
-static char *forth_lookup_word_name(reg cfa)
+char *forth_lookup_word_name(reg cfa)
 {
+    if (cfa == dovar_addr) {
+        return strdup("dovar");
+    }
+
+    if (cfa == docolon_addr) {
+        return strdup("docolon");
+    }
+
+    if (cfa == docons_addr) {
+        return strdup("docons");
+    }
+
+    if (cfa == dodoes_addr) {
+        return strdup("dodoes");
+    }
+
+    if (!mem_addr_is_valid(cfa)) {
+        return NULL;
+    }
+
     if (!mem_range_is_valid(cfa - 8, 12)) {
         return NULL;
     }
@@ -117,6 +139,13 @@ file_t *forth_init(char *filename, reg base, reg size)
     for (int i = 0; i < reloc_ncells; i++) {
         cell bits = reloc_bitmap[i];
         for (int j = 0; j < 32; j++) {
+            if (p == &kernel_image[kernel_ncells]) {
+                // NOTE that reloc_ncells/32 is possibly larger than kernel_ncells.
+                // This early exit prevents us from writing garbage beyond the end
+                // of the kernel.
+                break;
+            }
+
             mem_store(base, offset, *p + ((bits & 1) ? base : 0));
             p ++;
             offset += 4;
@@ -128,8 +157,10 @@ file_t *forth_init(char *filename, reg base, reg size)
 //  fp->rp0 = (void *) ((uintptr_t) base + size - 32);
 
     cell rp_size = mem_load(base, offsetof(forth_params_t, rp0));
-    mem_store(base, offsetof(forth_params_t, sp0), base + size - rp_size - 32);
-    mem_store(base, offsetof(forth_params_t, rp0), base + size - 32);
+    sp0 = base + size - rp_size - 32;
+    rp0 = base + size - 32;
+    mem_store(base, offsetof(forth_params_t, sp0), sp0);
+    mem_store(base, offsetof(forth_params_t, rp0), rp0);
     mem_store(base, offsetof(forth_params_t, exit_context), 0);
     mem_store(base, offsetof(forth_params_t, exit_func), 1);
     mem_store(base, offsetof(forth_params_t, type_cb), 2);
@@ -268,15 +299,13 @@ static char *forth_is_machinery(reg addr)
 
 reg forth_is_word(reg addr)
 {
-    reg word = mem_load(addr, 0);
-    char *machine_name;
-
-    machine_name = forth_is_machinery(addr);
+    char *machine_name = machine_name = forth_is_machinery(addr);
     if (machine_name) {
         printf("\n        : %s\n", machine_name);
         return 0;
     }
         
+    reg word = mem_load(addr, 0);
     if (word == 0xe494f004) {
         /*
          * Next
@@ -306,11 +335,12 @@ reg forth_is_word(reg addr)
     if (MATCH("(do)") || 
         MATCH("(branch)") ||
         MATCH("(0branch)") ||
+        MATCH("(=0branch)") ||
         MATCH("(loop)") ||
         MATCH("(next)") ||
         MATCH("(?for)") ||
-        MATCH("(0=branch)") ||
-        MATCH("(+loop)")) {
+        MATCH("(+loop)") ||
+        MATCH("(;code@)")) {
         printf("  %8.8x", mem_load(addr, 4));
         count ++;
     } else if (MATCH("lit")) {
@@ -348,4 +378,73 @@ reg forth_is_string(reg addr)
     printf("\"\n");
 
     return (4 + strlen + 3) >> 2;
+}
+
+void forth_word(reg ip)
+{
+    char *word_name = NULL;
+
+    if (mem_addr_is_valid(ip)) {
+        word_name = forth_lookup_word_name(ip);
+        reg t = ip;
+        while (!word_name && mem_addr_is_valid(t)) {
+            t -= 4;
+            word_name = forth_lookup_word_name(t);
+        }
+        if (word_name) {
+            printf("%s  ", word_name);
+            return;
+        }
+    }
+
+    printf("%8.8x  ", ip);
+}
+
+void forth_backtrace(void)
+{
+    cell rp = arm_get_reg(RP);
+
+    if (!mem_range_is_valid(rp, rp0 - rp)) return;
+
+    char *word_name = forth_lookup_word_name(arm_get_reg(PC));
+    if (word_name) {
+        if (strcmp(word_name, "^") == 0) {
+            return;
+        }
+        printf("Back trace: ");
+        printf("%s  ", word_name);
+        free(word_name);
+    } else {
+        return;
+    }
+
+    forth_word(arm_get_reg(IP));
+
+    while (rp < rp0) {
+        cell ip = mem_load(rp, 0);
+        forth_word(ip);
+        rp += 4;
+    }
+    printf("\n");
+}
+
+void forth_show_stack(void)
+{
+    cell sp = arm_get_reg(SP);  // Skip DECAFBAD that's been pushed
+
+    if (!mem_range_is_valid(sp, sp0 - sp)) return;
+
+    cell top = arm_get_reg(TOP);
+    if (top == 0xDECAFBAD) {
+        printf("Stack: (empty)\n");
+        return;
+    }
+
+    printf("Stack: %8.8x  ", top);
+    while (sp < sp0 - 4) {
+        cell n = mem_load(sp, 0);
+        printf("%8.8x  ", n);
+        sp += 4;
+    }
+    printf("\n");
 }
