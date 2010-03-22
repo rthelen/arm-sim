@@ -48,6 +48,7 @@ void usage(void)
     fprintf(stderr, "\n");
     fprintf(stderr, "-f filename  -- This is the name of the FORTH dictionary to load.\n");
     fprintf(stderr, "-d           -- Dump (print) the dictionary as assembly and FORTH words.\n");
+    fprintf(stderr, "-b           -- Generate a backtrace.\n");
     fprintf(stderr, "-q           -- Quiet output; i.e., don't list each instr. & reg values.\n");
     fprintf(stderr, "-no-undo     -- Don't enable the undo logic.\n");
     fprintf(stderr, "-v           -- Verbose output; print each instr. and reg values.\n");
@@ -56,10 +57,11 @@ void usage(void)
     fprintf(stderr, "\n");
     fprintf(stderr, "The undo logic is a system by which the processor can be backed up some\n");
     fprintf(stderr, "number of instructions.  It is off by default.\n");
+    exit(-1);
 }
 
 extern reg image_ncells;
-int dump, interactive, quiet;
+int dump, interactive, quiet, backtrace;
 
 void debug_if(int f)
 {
@@ -110,7 +112,12 @@ int main(int argc, char *argv[])
             undo_disable = 0;
             quiet = 0;
             argv += 1;
-        } else /* usage() */ ;
+        } else if (strcmp(*argv, "-b") == 0) {
+            backtrace = 1;
+            argv += 1;
+        } else {
+            usage();
+        }
     } while (save_argv != argv);
 
     memory_more(GB(2), MB(20));
@@ -125,13 +132,15 @@ int main(int argc, char *argv[])
         if (!quiet) arm_dump_registers();
         sim_done = 0;
         do {
-            debug_if (0 /* some condition */);
             if (!quiet) {
                 char buff[256];
                 int sz = sizeof(buff);
-                reg instr = mem_load(arm_get_reg(PC), 0);
-                disassemble(arm_get_reg(PC), instr, buff, sz);
-                printf("%8.8x: %8.8x  %s\n", arm_get_reg(PC), instr, buff);
+                reg pc = arm_get_reg(PC);
+                if (mem_addr_is_valid(pc)) {
+                    reg instr = mem_load(pc, 0);
+                    disassemble(pc, instr, buff, sz);
+                    printf("%8.8x: %8.8x  %s\n", pc, instr, buff);
+                }
             }
             if (interactive) {
                 char command[256]; // Ignored today.  Will parse later.
@@ -139,6 +148,7 @@ int main(int argc, char *argv[])
                 fgets(command, sizeof(command), stdin);
             }
             if (!execute_one()) break;
+            if (backtrace) forth_backtrace();
             if (!quiet) arm_dump_registers();
         } while (!sim_done);
         printf("Simulator terminated with sim_done == TRUE\n");
