@@ -83,6 +83,11 @@ void disassemble(reg addr, reg instr, char *buff, int sz)
     arm_instr_t op = arm_decode_instr(instr);
     reg dest;
 
+    if (instr == 0xe494f004) {
+        print_mnemonic(buff, sz, "next");
+        return;
+    }
+
     switch (op) {
     case ARM_INSTR_B:
         print_mnemonic(buff, sz, "b%s%s",
