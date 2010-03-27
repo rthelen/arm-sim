@@ -1,4 +1,11 @@
 /*
+ * This file is part of arm-sim: http://madscientistroom.org/arm-sim
+ *
+ * Copyright (c) 2010 Randy Thelen. All rights reserved, and all wrongs
+ * reversed. (See the file COPYRIGHT for details.)
+ */
+
+/*
  * ARM Simulator
  *
  * This program simulates an ARM processor.  It simulates only the bare

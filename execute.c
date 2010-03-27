@@ -1,4 +1,11 @@
 /*
+ * This file is part of arm-sim: http://madscientistroom.org/arm-sim
+ *
+ * Copyright (c) 2010 Randy Thelen. All rights reserved, and all wrongs
+ * reversed. (See the file COPYRIGHT for details.)
+ */
+
+/*
  * execute.c
  *
  * This file has the code to execute ARM instructions.

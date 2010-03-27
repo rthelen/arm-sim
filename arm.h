@@ -1,3 +1,10 @@
+/*
+ * This file is part of arm-sim: http://madscientistroom.org/arm-sim
+ *
+ * Copyright (c) 2010 Randy Thelen. All rights reserved, and all wrongs
+ * reversed. (See the file COPYRIGHT for details.)
+ */
+
 
 #define R0  0
 #define R1  1
