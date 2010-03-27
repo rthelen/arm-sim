@@ -2,12 +2,9 @@
 
 reg io_readfile(reg filename, reg len)
 {
-    char *basename = "/private/tftpboot/FORTH/";
-    char *s = malloc(strlen(basename) + len + 1);
+    char *s = malloc(len + 1);
     char *p = s;
-    for (int j = 0; j < strlen(basename); j++) {
-        *p++ = basename[j];
-    }
+
     for (int i = 0; i < len; i++) {
         *p++ = mem_loadb(filename, i);
     }

@@ -8,6 +8,17 @@
 #include <stdarg.h>
 #include <ctype.h>
 
+/*
+ * Machine specific selection mechanism
+ *
+ * Note that LINUX is defined when the program is compiled on a LINUX host.
+ */
+#if defined(__MACH__) && defined(__APPLE__)
+#define MACOSX  1
+#endif
+
+extern char *forth_path;
+
 typedef uint32_t reg;
 typedef uint8_t  byte;
 

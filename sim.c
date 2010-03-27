@@ -73,7 +73,7 @@ void debug_if(int f)
 
 int main(int argc, char *argv[])
 {
-    char *filename = "/private/tftpboot/FORTH/FORTH.img";
+    char *filename = "FORTH.img";
     char **save_argv;
 
     prog_name = argv[0];
@@ -82,6 +82,10 @@ int main(int argc, char *argv[])
     quiet = 1;
     dump = 0;
     interactive = 0;
+    forth_path = "";  // I.e., the local directory
+    if (getenv("MUFORTH_PATH")) {
+        forth_path = getenv("MUFORTH_PATH");
+    }
 
     argv += 1;
     do {
@@ -115,6 +119,9 @@ int main(int argc, char *argv[])
         } else if (strcmp(*argv, "-b") == 0) {
             backtrace = 1;
             argv += 1;
+        } else if (strcmp(*argv, "-p") == 0) {
+            forth_path = argv[1];
+            argv += 2;
         } else {
             usage();
         }

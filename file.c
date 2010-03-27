@@ -1,13 +1,24 @@
 #include "sim.h"
 
+char *forth_path;
+
 file_t *file_load(char *file_name)
 {
+    char *fname;
     file_t *file;
+
+    if (file_name[0] == '/') {
+        asprintf(&fname, "%s", file_name);
+    } else if (forth_path[strlen(forth_path) -1] == '/') {
+        asprintf(&fname, "%s%s", forth_path, file_name);
+    } else {
+        asprintf(&fname, "%s/%s", forth_path, file_name);
+    }
 
     file = malloc(sizeof(file_t));
     if (!file) return NULL;
 
-    file->name = file_name;
+    file->name = fname;
     file->fp = NULL;
     file->image = NULL;
     file->image_size = 0;
