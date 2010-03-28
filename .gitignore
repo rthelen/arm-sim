@@ -1,0 +1,11 @@
+# ignore generated files
+sim
+*.o
+
+# ignore editor backups (Vim)
+*~
+
+# ignore other editor garbage (Vim)
+*.swp
+*.swo
+
