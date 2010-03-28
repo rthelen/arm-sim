@@ -391,7 +391,7 @@ void forth_word(reg ip)
 {
     char *word_name = NULL;
 
-    if (mem_addr_is_valid(ip)) {
+    if (mem_addr_is_valid(ip) && (ip & 3) == 0) {
         word_name = forth_lookup_word_name(ip);
         reg t = ip;
         while (!word_name && mem_addr_is_valid(t)) {
