@@ -14,13 +14,15 @@ file_t *file_load(char *file_name)
     char *fname;
     file_t *file;
 
-    if (file_name[0] == '/') {
+    if (file_name[0] == '/' || file_name[0] == '.') {
         asprintf(&fname, "%s", file_name);
-    } else if (forth_path[strlen(forth_path) -1] == '/') {
-        asprintf(&fname, "%s%s", forth_path, file_name);
     } else {
         asprintf(&fname, "%s/%s", forth_path, file_name);
     }
+#ifdef DEBUG
+    fprintf(stderr, "file_name = \"%s\"\nforth_path = \"%s\"\nfname = \"%s\"\n", 
+        file_name, forth_path, fname);
+#endif
 
     file = malloc(sizeof(file_t));
     if (!file) return NULL;

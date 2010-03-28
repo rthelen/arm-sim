@@ -54,6 +54,7 @@ void usage(void)
     fprintf(stderr, "modified to support non-FORTH systems, but that would be more work.\n");
     fprintf(stderr, "\n");
     fprintf(stderr, "-f filename  -- This is the name of the FORTH dictionary to load.\n");
+    fprintf(stderr, "-p path      -- Relative or absolute path to FORTH files to load.\n");
     fprintf(stderr, "-d           -- Dump (print) the dictionary as assembly and FORTH words.\n");
     fprintf(stderr, "-b           -- Generate a backtrace.\n");
     fprintf(stderr, "-q           -- Quiet output; i.e., don't list each instr. & reg values.\n");
@@ -78,9 +79,21 @@ void debug_if(int f)
     }
 }
 
+/*
+ * If path contains more than one character and ends with '/', then strip
+ * the trailing '/'.
+ */
+void canonicalise_path(char *path)
+{
+    int len = strlen(path);
+    if (len > 1 && path[len-1] == '/')
+        path[len-1] = '\0';
+}
+
 int main(int argc, char *argv[])
 {
     char *filename = "FORTH.img";
+    char *fp_env;
     char **save_argv;
 
     prog_name = argv[0];
@@ -89,9 +102,9 @@ int main(int argc, char *argv[])
     quiet = 1;
     dump = 0;
     interactive = 0;
-    forth_path = "";  // I.e., the local directory
-    if (getenv("MUFORTH_PATH")) {
-        forth_path = getenv("MUFORTH_PATH");
+    forth_path = ".";  // I.e., the local directory
+    if ((fp_env = getenv("MUFORTH_PATH"))) {
+        forth_path = fp_env;
     }
 
     argv += 1;
@@ -102,6 +115,9 @@ int main(int argc, char *argv[])
 
         if (strcmp(*argv, "-f") == 0 && argv[1]) {
             filename = argv[1];
+            argv += 2;
+        } else if (strcmp(*argv, "-p") == 0 && argv[1]) {
+            forth_path = argv[1];
             argv += 2;
         } else if (strcmp(*argv, "-d") == 0) {
             dump = 1;
@@ -126,13 +142,12 @@ int main(int argc, char *argv[])
         } else if (strcmp(*argv, "-b") == 0) {
             backtrace = 1;
             argv += 1;
-        } else if (strcmp(*argv, "-p") == 0) {
-            forth_path = argv[1];
-            argv += 2;
         } else {
             usage();
         }
     } while (save_argv != argv);
+
+    canonicalise_path(forth_path);
 
     memory_more(GB(2), MB(20));
 

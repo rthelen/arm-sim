@@ -11,7 +11,7 @@ INCL = sim.h
 CFLAGS = -Wall -Werror -std=c99
 
 ifneq ($(DEBUG),)
-	CFLAGS += -ggdb
+	CFLAGS += -ggdb -DDEBUG
 else
 	CFLAGS += -O2
 endif
