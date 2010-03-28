@@ -447,7 +447,9 @@ int execute_one(void)
                     v = 0;
                 }
                 // C := carry out of the ALU
-                if (SIGN(n | m)) {
+                if (SIGN(n) && SIGN(m)) {
+                    c = 1;
+                } else if (SIGN(n | m)) {
                     c = !(SIGN(d));
                 } else {
                     c = 0;
