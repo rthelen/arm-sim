@@ -158,8 +158,8 @@ int execute_callbacks(reg pc)
     switch (pc) {
     case 1: sim_done = 1; break;
     case 2: io_write(arm_get_reg(R0), arm_get_reg(R1)); break;
-    case 3: arm_set_reg(R0, io_readline(arm_get_reg(R0), arm_get_reg(R1))); debug_if(0); break;
-    case 4: arm_set_reg(R0, io_readfile(arm_get_reg(R0), arm_get_reg(R1))); break;
+    case 3: undo_record_reg(R0); arm_set_reg(R0, io_readline(arm_get_reg(R0), arm_get_reg(R1))); debug_if(0); break;
+    case 4: undo_record_reg(R0); arm_set_reg(R0, io_readfile(arm_get_reg(R0), arm_get_reg(R1))); break;
     case 5: /* Nothing to do for sync caches */ break;
     }
 
@@ -264,10 +264,11 @@ int execute_one(void)
         maddr = arm_get_reg(rn);
         if (rn == PC) maddr += 4;
         if (pre_post) maddr += offset;
-        undo_record_memory(maddr);
         if (!IBIT(22)) {
+            undo_record_memory(maddr);
             mem_store(maddr, 0, arm_get_reg(rd));
         } else {
+            undo_record_byte(maddr);
             mem_storeb(maddr, 0, arm_get_reg(rd));
         }
         if (write_back || !pre_post) {
@@ -279,9 +280,6 @@ int execute_one(void)
 
     case ARM_INSTR_LDM:
         maddr = arm_get_reg(rn);
-        if (write_back) {
-            undo_record_reg(rn);
-        }
 
         if (up_down) {
             rm = 0;
@@ -300,15 +298,13 @@ int execute_one(void)
         }
 
         if (write_back) {
+            undo_record_reg(rn);
             arm_set_reg(rn, maddr);
         }
         break;
 
     case ARM_INSTR_STM:
         maddr = arm_get_reg(rn);
-        if (write_back) {
-            undo_record_reg(rn);
-        }
 
         if (up_down) {
             rm = 0;
@@ -320,15 +316,16 @@ int execute_one(void)
         for (reg count = 0; count < 16; count++, rm += step) {
             if (IBIT(rm)) {
                 maddr = pre_inc(maddr, pre_post, up_down);
-                undo_record_memory(maddr);
                 reg m = arm_get_reg(rm);
                 if (rm == PC) m += 8;
+                undo_record_memory(maddr);
                 mem_store(maddr, 0, arm_get_reg(rm));
                 maddr = post_inc(maddr, pre_post, up_down);
             }
         }
 
         if (write_back) {
+            undo_record_reg(rn);
             arm_set_reg(rn, maddr);
         }
         break;
@@ -412,7 +409,6 @@ int execute_one(void)
         case ARM_INSTR_BIC:
         case ARM_INSTR_MVN:
             if (setconds && rd != PC) {
-                undo_record_reg(FLAGS);
                 // V := V
                 v = (flags & V) >> V_SHIFT;
                 // C := carry out from the barrel shifter, or C if shift is LSL #0
@@ -422,6 +418,7 @@ int execute_one(void)
                 // N := if d & (1<<31)
                 n = SIGN(d);
 
+                undo_record_reg(FLAGS);
                 arm_set_reg(FLAGS, z << Z_SHIFT | v << V_SHIFT | n << N_SHIFT | c << C_SHIFT);
             }
             break;
@@ -435,7 +432,6 @@ int execute_one(void)
         case ARM_INSTR_CMP:
         case ARM_INSTR_CMN:
             if (setconds && rd != PC) {
-                undo_record_reg(FLAGS);
                 if (!SIGN(n ^ m)) {
                     /*
                      * If the signs of the two operands are the same, then
@@ -461,6 +457,7 @@ int execute_one(void)
                 // N := if d & (1<<31)
                 n = TF(SIGN(d));
 
+                undo_record_reg(FLAGS);
                 arm_set_reg(FLAGS, z << Z_SHIFT | v << V_SHIFT | n << N_SHIFT | c << C_SHIFT);
             }
             break;

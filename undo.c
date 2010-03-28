@@ -36,8 +36,6 @@
 
 typedef struct {
     int type;		// Negative if the next log entry is part of same instruction
-    reg pc;
-    reg flags;
     union {
         int reg_num;
         reg address;
@@ -50,32 +48,50 @@ typedef struct {
  * instructions but can an arbitrary number of instructions.
  */
 
-#define MAX_UNDO_LOGS		10000
+#define MAX_UNDO_LOGS		2000
 undo_log_entry_t undo_logs[MAX_UNDO_LOGS];
-int undo_started, undo_instr_first;
+int undo_started;
 int undo_count;
-int undo_idx;
 int undo_disable;
+int undo_head, undo_tail;
+
+/*
+ * undo_head points to the beginning of a complete undo log sequence.
+ * undo_tail points to the next log entry to use.  When undo_tail points at
+ * undo_head, i.e., the log is full, then when a new log entry is needed,
+ * undo_head is pushed forward past the undo log sequence to point to the
+ * first log entry in the next log sequence.
+ *
+ * undo_count is the number of sequences contained between undo_head and
+ * undo_tail.
+ */
 
 #define UNDO_REG		1
 #define UNDO_MEM		2
 
+#define NEXT(v)		(((v) + 1) % MAX_UNDO_LOGS)
+#define PREV(v)		(((v) + MAX_UNDO_LOGS - 1) % MAX_UNDO_LOGS)
+
+static int undo_skip_forward(int seq_index)
+{
+    while (undo_logs[seq_index].type < 0) {
+        seq_index = NEXT(seq_index);
+    }
+
+    return NEXT(seq_index);
+}
 
 static undo_log_entry_t *undo_record_common(int type)
 {
-    undo_log_entry_t *u = &undo_logs[undo_count++];
-
-    /*
-     * Later, we can alloc the undo_logs and grow them as necessary.
-     */
-
-    ASSERT(undo_count < MAX_UNDO_LOGS);
-
-    undo_logs[undo_count].type = 0;
-
+    undo_log_entry_t *u = &undo_logs[undo_tail];
     u->type = type;
-    u->pc = arm_get_reg(PC);
-    u->flags = arm_get_reg(FLAGS);
+
+    undo_tail = NEXT(undo_tail);
+
+    if (undo_tail == undo_head) {
+        undo_head = undo_skip_forward(undo_head);
+        undo_count --;
+    }
 
     return u;
 }
@@ -83,13 +99,13 @@ static undo_log_entry_t *undo_record_common(int type)
 static void undo_start(void)
 {
     undo_started = 1;
-    undo_instr_first = undo_count;
+    undo_count += 1;
 }
 
 static void undo_another(void)
 {
-    ASSERT(undo_count > 0);
-    undo_logs[undo_count -1].type = - undo_logs[undo_count].type;
+    undo_log_entry_t *u = &undo_logs[PREV(undo_tail)];
+    u->type = -u->type;
 }
 
 void undo_record_reg(int reg_num)
@@ -98,8 +114,8 @@ void undo_record_reg(int reg_num)
 
     if (undo_disable) return;
 
-    if (undo_started) undo_another();
-    else undo_start();
+    if (!undo_started) undo_start();
+    else undo_another();
 
     u = undo_record_common(UNDO_REG);
     u->u.reg_num = reg_num;
@@ -113,12 +129,26 @@ void undo_record_memory(reg address)
 
     if (undo_disable) return;
 
-    if (undo_started) undo_another();
-    else undo_start();
+    if (!undo_started) undo_start();
+    else undo_another();
 
     u = undo_record_common(UNDO_MEM);
     u->u.address = address;
     u->contents = mem_load(address, 0);
+}
+
+void undo_record_byte(reg address)
+{
+    undo_log_entry_t *u;
+
+    if (undo_disable) return;
+
+    if (!undo_started) undo_start();
+    else undo_another();
+
+    u = undo_record_common(UNDO_MEM);
+    u->u.address = address;
+    u->contents = mem_loadb(address, 0);
 }
 
 void undo_finish_instr(void)
@@ -128,15 +158,14 @@ void undo_finish_instr(void)
 
 void undo_clear(void)
 {
-    undo_count = undo_idx;
-
-    while (undo_logs[undo_count].type < 0) {
-        undo_count++;
-    }
-    undo_logs[undo_count].type = 0;
 }
 
 int undo(int num_steps);
 int redo(int num_steps);
-int undo_size(void);
+
+int undo_size(void)
+{
+    return undo_count;
+}
+
 int redo_size(void);
