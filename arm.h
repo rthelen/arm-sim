@@ -76,11 +76,7 @@ typedef enum {
     ARM_INSTR_MVN,
 
     ARM_INSTR_MUL,    // Beginning of multiply ops
-    ARM_INSTR_MLA,
-    ARM_INSTR_UMULL,
-    ARM_INSTR_UMLAL,
-    ARM_INSTR_SMULL,
-    ARM_INSTR_SMLAL,
+    ARM_INSTR_MULL,
 
     ARM_INSTR_STR,
     ARM_INSTR_LDR,

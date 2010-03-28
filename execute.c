@@ -20,6 +20,9 @@
 #define CLR(x)   (!TF(x))
 #define SET(x)   ( TF(x))
 #define SIGN(x)  ( TF((x) & (1 << 31)))
+#define SIGN64(x)  ( TF((x) & (1ll << 63)))
+#define SWAP(a,b) do { reg _t = a; a = b; b = _t; } while (0)
+#define SEXT(a)   (SIGN(a) ? 0xFFFFFFFF00000000ll | a : a)
 
 void init_execution(void)
 {
@@ -196,7 +199,8 @@ int execute_one(void)
     reg shift_type = IBITS(5, 2);
     reg setconds = IBIT(20);
     reg maddr, offset;
-    reg d, n, m;
+    reg d, n, m, s;
+    uint64_t d64, n64, m64, s64;
     reg c, z, v, nc;
     reg step;
 
@@ -483,6 +487,64 @@ int execute_one(void)
             arm_set_reg(rd, d);
             break;
         default: break;
+        }
+        break;
+
+    case ARM_INSTR_MUL:
+        SWAP(rd, rn);
+
+        m = arm_get_reg(rm);
+        s = arm_get_reg(rs);
+
+        d = m * s;
+        if (IBIT(21)) {
+            n = arm_get_reg(rn);
+            d += n;
+        }
+        undo_record_reg(rd);
+        arm_set_reg(rd, d);
+        if (IBIT(20)) {
+            v = TF(arm_get_reg(FLAGS) >> V_SHIFT);
+            c = 0;
+            z = d == 0;
+            n = SIGN(d);
+            undo_record_reg(FLAGS);
+            arm_set_reg(FLAGS, z << Z_SHIFT | v << V_SHIFT | n << N_SHIFT | c << C_SHIFT);
+        }
+        break;
+
+    case ARM_INSTR_MULL:
+        SWAP(rd, rn);
+        
+        m = arm_get_reg(rm);
+        s = arm_get_reg(rs);
+
+        if (IBIT(22)) {
+            m64 = SEXT(m);
+            s64 = SEXT(s);
+        } else {
+            m64 = m;
+            s64 = s;
+        }
+
+        d64 = m64 * s64;
+        if (IBIT(21)) {
+            n64 = ((uint64_t)arm_get_reg(rd) << 32) | arm_get_reg(rn);
+            d64 += n64;
+        }
+
+        undo_record_reg(rd);
+        undo_record_reg(rn);
+        arm_set_reg(rd, d64 >> 32);
+        arm_set_reg(rn, d64);
+
+        if (IBIT(20)) {
+            v = 0;
+            c = 0;
+            z = d64 == 0;
+            n = SIGN64(d64);
+            undo_record_reg(FLAGS);
+            arm_set_reg(FLAGS, z << Z_SHIFT | v << V_SHIFT | n << N_SHIFT | c << C_SHIFT);
         }
         break;
 

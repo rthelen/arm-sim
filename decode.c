@@ -24,16 +24,8 @@ arm_instr_t arm_decode_instr(reg instr)
         if (!IBIT(25) &&  IBIT(4) && !IBIT(7)) return (ARM_INSTR_AND + IBITS(21, 4));
         if ( IBIT(25))                         return (ARM_INSTR_AND + IBITS(21, 4));
     }
-    if (IBITS(24,4) == 0 && IBITS(4,4) == BPAT4(1,0,0,1)) {
-        switch(IBITS(21,3)) {
-        case BPAT3(0,0,0): return (ARM_INSTR_MUL);
-        case BPAT3(0,0,1): return (ARM_INSTR_MLA);
-        case BPAT3(1,0,0): return (ARM_INSTR_UMULL);
-        case BPAT3(1,0,1): return (ARM_INSTR_UMLAL);
-        case BPAT3(1,1,0): return (ARM_INSTR_SMULL);
-        case BPAT3(1,1,1): return (ARM_INSTR_SMLAL);
-        }
-    }
+    if (IBITS(22,6) == 0 && IBITS(4,4) == 9)   return ARM_INSTR_MUL;
+    if (IBITS(23,5) == 1 && IBITS(4,4) == 9)   return ARM_INSTR_MULL;
 
     if (IBITS(25,3) == 2) {
         /* Load/Store 12bit imm */
