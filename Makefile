@@ -5,8 +5,9 @@
 # reversed. (See the file COPYRIGHT for details.)
 #
 
-OBJS = sim.o memory.o io.o file.o warn.o forth.o decode.o disassemble.o execute.o arm.o undo.o
-INCL = sim.h
+SRC  = sim.c memory.c io.c file.c warn.c forth.c decode.c disassemble.c execute.c arm.c undo.c
+OBJS = $(patsubst %.c, objects/%.o, ${SRC})
+INCL = sim.h arm.h
 
 CFLAGS = -Wall -Werror -std=c99
 
@@ -19,7 +20,14 @@ endif
 sim: ${OBJS} ${INCL}
 	cc ${OBJS} -o $@
 
+.PHONY: objects
+objects:
+	@mkdir -p objects
+
+objects/%.o: %.c ${INCL} objects
+	$(CC) -c $(CPPFLAGS) $(CFLAGS) $< -o $@
+
 clean:
 	rm -f *~
-	rm -f *.o
+	rm -rf objects
 	rm -f sim
