@@ -10,6 +10,8 @@
 
 char *regs[] = {"r0", "r1", "r2", "r3", "ip", "rp", "top", "count", "r8", "r9", "r10", "r11", "r12", "sp", "lr", "pc"};
 
+#define SWAP(a,b) do { reg _t = a; a = b; b = _t; } while (0)
+
 reg decode_dest_addr(reg addr, reg offset, int offset_sz, int half_flag)
 {
     if (offset >> (offset_sz -1)) {
@@ -29,6 +31,7 @@ reg decode_dest_addr(reg addr, reg offset, int offset_sz, int half_flag)
 }
 
 #define MNEMONIC_FIELD_SZ	8
+#define OPERAND_FIELD_SZ    20
 static void print_mnemonic(char *buff, int sz, const char *fmt, ...)
 {
     va_list va;
@@ -40,6 +43,7 @@ static void print_mnemonic(char *buff, int sz, const char *fmt, ...)
         buff[len++] = ' ';
         buff[len] = '\0';
     }
+    va_end(va);
 }
 
 static void append_operands(char *buff, int sz, const char *fmt, ...)
@@ -52,6 +56,25 @@ static void append_operands(char *buff, int sz, const char *fmt, ...)
 
     va_start(va, fmt);
     vsnprintf(buff + len, sz - len, fmt, va);
+    va_end(va);
+}
+
+static void append_comments(char *buff, int sz, const char *fmt, ...)
+{
+    va_list va;
+    int len = strlen(buff);
+    
+    while (len < MNEMONIC_FIELD_SZ + OPERAND_FIELD_SZ) {
+        if (len >= (sz -1)) return;
+        buff[len++] = ' ';
+        buff[len] = '\0';
+    }
+
+    len += snprintf(buff + len, sz - len, "# ");
+
+    va_start(va, fmt);
+    vsnprintf(buff + len, sz - len, fmt, va);
+    va_end(va);
 }
 
 void disassemble(reg addr, reg instr, char *buff, int sz)
@@ -72,9 +95,6 @@ void disassemble(reg addr, reg instr, char *buff, int sz)
     reg write_back = IBIT(21);
     reg up_down = IBIT(23);
     reg pre_post = IBIT(24);
-#if 0
-    char *muls[] = {"mul", "mla", "??", "??", "umull", "umlal", "smull", "smlal"};
-#endif
 
     char temp1[128];
     int t1sz = sizeof(temp1);
@@ -252,6 +272,38 @@ void disassemble(reg addr, reg instr, char *buff, int sz)
                         regs[rn],
                         write_back ? "!" : "",
                         temp2);
+        break;
+
+    case ARM_INSTR_MUL:
+        SWAP(rd, rn);
+        print_mnemonic(buff, sz, "%s%s%s", IBIT(21) ? "mla" : "mul", conds[cond], IBIT(20) ? "s" : "");
+        if (IBIT(21)) {
+            append_operands(buff, sz, "%s, %s, %s, %s",
+                            regs[rd], regs[rm], regs[rs], regs[rn]);
+        } else {
+            append_operands(buff, sz, "%s, %s, %s",
+                            regs[rd], regs[rm], regs[rs]);
+        }
+        break;
+
+    case ARM_INSTR_MULL:
+        SWAP(rd, rn);
+        print_mnemonic(buff, sz, "%s%s%s%s", 
+                       IBIT(22) ? "s" : "u",
+                       IBIT(21) ? "mlal" : "mull",
+                       conds[cond],
+                       IBIT(20) ? "s" : "");
+        append_operands(buff, sz, "%s, %s, %s, %s", regs[rd], regs[rn], regs[rm], regs[rs]);
+        if (IBIT(21)) {
+            append_comments(buff, sz, "%s,%s := %s * %s + %s,%s",
+                            regs[rd], regs[rn],
+                            regs[rm], regs[rs],
+                            regs[rd], regs[rn]);
+        } else {
+            append_comments(buff, sz, "%s,%s := %s * %s",
+                            regs[rd], regs[rn],
+                            regs[rm], regs[rs]);
+        }
         break;
 
     default:

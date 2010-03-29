@@ -141,7 +141,7 @@ byte mem_loadb(reg arm_addr, reg arm_offset)
 
 void mem_dump(reg arm_addr, reg arm_numwords)
 {
-    char instr[40];
+    char instr[240];
     while (arm_numwords > 0) {
         reg ir = mem_load(arm_addr, 0);
         // reg i = arm_decode_instr(ir);
