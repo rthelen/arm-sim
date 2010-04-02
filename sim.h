@@ -27,6 +27,7 @@
 extern char *forth_path;
 
 typedef uint32_t reg;
+typedef int32_t sreg;
 typedef uint8_t  byte;
 
 int sim_done;
