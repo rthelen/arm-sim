@@ -41,78 +41,119 @@
 
 #include "sim.h"
 #include "forth.h"
+#include <stdarg.h>
+#include <stdio.h>
 #include <setjmp.h>
 
-as_header_t *dict_head;
-as_header_t *dict_bps[MAX_BREAK_POINTS];
-
-jmp_buf forth_jmpbuf;
-
-int SP;            /* parameter stack pointer */
-int RP;            /* return stack pointer */
-int LP;            /* loop stack pointer */
-as_body_t *IP;     /* instruction pointer */
-
-cell        stack[STACK_SIZE];
-as_body_t *rstack[RSTACK_SIZE];
-int        lstack[LSTACK_SIZE];
-
-static void stack_check(int sp, int sz)
+static void fth_err(F f, int err_num)
 {
-    if ((sp <= 0) || (sp > sz)) longjmp(forth_jmpbuf, 1);
+    f->err_num = err_num;
+    longjmp(f->jmpbuf, err_num);
 }
 
-void rpush(as_body_t *p) { stack_check(RP, RSTACK_SIZE); rstack[--RP] = p; }
-as_body_t *rpop(void)    { stack_check(RP, RSTACK_SIZE); return rstack[RP++]; }
+static void fth_assert(F f, int condition, int err, const char *fmt, ...)
+{
+    va_list ap;
 
-void lpush(int n) { stack_check(LP, LSTACK_SIZE); lstack[--LP] = n; }
-int lpop(void)    { stack_check(LP, LSTACK_SIZE); return lstack[LP++]; }
+    if (condition == 0) return;
 
-static void push(cell v) { stack_check(SP, STACK_SIZE);  stack[--SP] = v; }
-cell as_pop(void)        { stack_check(SP, STACK_SIZE);  return stack[SP++]; }
+    va_start(ap, fmt);
+    vasprintf(&f->err_str, fmt, ap);
+    va_end(ap);
 
-scell as_spop(void)   { return (scell) as_pop(); }
-void as_dup(void) { cell a = POP; PUSH(a); PUSH(a); }
-void as_drop(void) { POP; }
-void as_swap(void) { cell a = POP; cell b = POP; PUSH(a); PUSH(b); }
-void as_nip(void) { SWAP; DROP; }
+    fth_err(f, err);
+}
 
-void as_plus(void) { PUSH(SPOP + SPOP); }
-void as_sub(void)  { PUSH(-SPOP + SPOP); }
-void as_star()     { PUSH(SPOP * SPOP); }
-void as_slash()    { SWAP; PUSH(SPOP / SPOP); }
-void as_and(void)  { PUSH(POP & POP); }
-void as_or(void)   { PUSH(POP | POP); }
-void as_xor(void)  { PUSH(POP ^ POP); }
+static void fth_stack_check(F f, int stack_num)
+{
+    int err_under, err_over, sp, sz;
+    const char *name;
 
-void as_negate(void)   { PUSH(-SPOP); }
-void as_invert(void)   { PUSH(~SPOP); }
+    switch (stack_num) {
+    case F_DATA_STACK: // Data stack
+        err_under = F_STACK_UNDERRUN;
+        err_over  = F_STACK_OVERFLOW;
+        sp = f->sp;
+        sz = STACK_SIZE;
+        name = "data";
+        break;
 
-void as_2star(void)    { PUSH(SPOP << 1); }
-void as_2slash(void)   { PUSH(SPOP >> 1); }
-void as_u2slash(void)  { PUSH(POP >> 1); }
+    case F_RETURN_STACK: // Data stack
+        err_under = F_RETURN_STACK_UNDERRUN;
+        err_over  = F_RETURN_STACK_OVERFLOW;
+        sp = f->sp;
+        sz = RSTACK_SIZE;
+        name = "return";
+        break;
 
-void as_shift_left(void)    { cell cnt = POP,       n =  POP; PUSH(n << cnt); }
-void as_shift_right(void)   { cell cnt = POP; scell n = SPOP; PUSH(n >> cnt); }
-void as_ushift_right(void)  { cell cnt = POP; cell  n =  POP; PUSH(n >> cnt); }
+    case F_LOOP_STACK: // Data stack
+        err_under = F_LOOP_STACK_UNDERRUN;
+        err_over  = F_LOOP_STACK_OVERFLOW;
+        sp = f->sp;
+        sz = LSTACK_SIZE;
+        name = "loop";
+        break;
+        
+    default:
+        fprintf(stderr, "INVALID stack number used in fth_stack_check(%d)\n", stack_num);
+        exit(-1);
+    }
+        
+    fth_assert(f, sp <= 0, err_over, "%s stack overflow", name);
+    fth_assert(f, sp > sz, err_under, "%s stack underflow", name);
+}
 
-void as_fetch(void)   { PUSH(mem_load(POP, 0)); }
-void as_cfetch(void)  { PUSH(mem_loadb(POP, 0)); }
+void rpush(F f, fth_body_t *p) { fth_stack_check(f, F_RETURN_STACK); rstack[--RP] = p; }
+fth_body_t *rpop(F f)          { fth_stack_check(f, F_RETURN_STACK); return rstack[RP++]; }
 
-void as_store(void)       { cell addr = POP, v = POP; mem_store(addr, 0, v); }
-void as_cstore(void)      { cell addr = POP, v = POP; mem_storeb(addr, 0, v); }
-void as_plus_store(void)  { cell addr = POP, v = POP; mem_store(mem_load(addr, 0), 0, v); }
+void lpush(F f, int n)         { fth_stack_check(f, F_LOOP_STACK); lstack[--LP] = n; }
+int lpop(F f)                  { fth_stack_check(f, F_LOOP_STACK); return lstack[LP++]; }
 
-void as_2drop(void)  { POP; POP; }
-void as_over(void)   { cell b = POP; cell a = POP; PUSH(a); PUSH(b); PUSH(a); } /* a b -> a b a */
+static void push(F f, cell v)  { fth_stack_check(f, F_DATA_STACK);  stack[--SP] = v; }
+cell fth_pop(F f)              { fth_stack_check(f, F_DATA_STACK);  return stack[SP++]; }
 
-void as_uless(void)  {  cell b =  POP;  cell a =  POP; PUSH(a < b ? -1 : 0); }
-void as_less(void)   { scell b = SPOP; scell a = SPOP; PUSH(a < b ? -1 : 0); }
+scell fth_spop(F f)   { return (scell) POP; }
+void fth_dup(F f)     { cell a = POP; PUSH(a); PUSH(a); }
+void fth_drop(F f)    { POP; }
+void fth_swap(F f)    { cell a = POP; cell b = POP; PUSH(a); PUSH(b); }
+void fth_nip(F f)     { SWAP; DROP; }
 
-void as_zero_less(void)   { PUSH(SPOP <  0 ? -1 : 0); }
-void as_zero_equal(void)  { PUSH( POP == 0 ? -1 : 0); }
+void fth_plus(F f)    { PUSH(SPOP + SPOP); }
+void fth_sub(F f)     { PUSH(-SPOP + SPOP); }
+void fth_star(F f)    { PUSH(SPOP * SPOP); }
+void fth_slash(F f)   { SWAP; PUSH(SPOP / SPOP); }
+void fth_and(F f)     { PUSH(POP & POP); }
+void fth_or(F f)      { PUSH(POP | POP); }
+void fth_xor(F f)     { PUSH(POP ^ POP); }
 
-void as_uslash_mod(void)  /* u1 u2 -- um uq */
+void fth_negate(F f)   { PUSH(-SPOP); }
+void fth_invert(F f)   { PUSH(~SPOP); }
+
+void fth_2star(F f)    { PUSH(SPOP << 1); }
+void fth_2slash(F f)   { PUSH(SPOP >> 1); }
+void fth_u2slash(F f)  { PUSH(POP >> 1); }
+
+void fth_shift_left(F f)    { cell cnt = POP,       n =  POP; PUSH(n << cnt); }
+void fth_shift_right(F f)   { cell cnt = POP; scell n = SPOP; PUSH(n >> cnt); }
+void fth_ushift_right(F f)  { cell cnt = POP; cell  n =  POP; PUSH(n >> cnt); }
+
+void fth_fetch(F f)   { PUSH(mem_load(POP, 0)); }
+void fth_cfetch(F f)  { PUSH(mem_loadb(POP, 0)); }
+
+void fth_store(F f)       { cell addr = POP, v = POP; mem_store(addr, 0, v); }
+void fth_cstore(F f)      { cell addr = POP, v = POP; mem_storeb(addr, 0, v); }
+void fth_plus_store(F f)  { cell addr = POP, v = POP; mem_store(mem_load(addr, 0), 0, v); }
+
+void fth_2drop(F f)  { POP; POP; }
+void fth_over(F f)   { cell b = POP; cell a = POP; PUSH(a); PUSH(b); PUSH(a); } /* a b -> a b a */
+
+void fth_uless(F f)  {  cell b =  POP;  cell a =  POP; PUSH(a < b ? -1 : 0); }
+void fth_less(F f)   { scell b = SPOP; scell a = SPOP; PUSH(a < b ? -1 : 0); }
+
+void fth_zero_less(F f)   { PUSH(SPOP <  0 ? -1 : 0); }
+void fth_zero_equal(F f)  { PUSH( POP == 0 ? -1 : 0); }
+
+void fth_uslash_mod(F f)  /* u1 u2 -- um uq */
 {
     cell top = POP;
     cell st1 = POP;
@@ -147,7 +188,7 @@ void as_uslash_mod(void)  /* u1 u2 -- um uq */
  * and q,r are the symmetric quotient and remainder.
  *
  */
-void as_slash_mod(void)  /* n1 n2 -- m q */
+void fth_slash_mod(F f)  /* n1 n2 -- m q */
 {
     scell top = POP;
     scell st1 = POP;
@@ -171,3 +212,108 @@ void as_slash_mod(void)  /* n1 n2 -- m q */
     PUSH(mod);
     PUSH(quot);
 }
+
+void fth_dot(F f) { printf("%x ", POP); }
+
+void fth_do_var(fth_header_t *v) { PUSH(v->n.var); }
+void fth_do_cons(fth_header_t *c) { PUSH(v->n.cons); }
+void fth_do_array(fth_header_t *a)
+{
+    cell idx = POP;
+    if (idx >= a->n.dim) {
+        longjmp(fth_jmpbuf, 3);
+    }
+
+    PUSH(a->p.body[idx]);
+}
+
+static cell *fth_get_var_address(F f)
+{
+    fth_header_t *v = *IP++;
+    if (v->func != fth_do_var) {
+        longjmp(fth_jmpbuf, 2);
+    }
+
+    return &v->n.var;
+}
+
+static cell *fth_get_array_address(F f)
+{
+    fth_header_t *v = *IP++;
+    if (v->func != fth_do_array) {
+        longjmp(fth_jmpbuf, 2);
+    }
+
+    cell idx = POP;
+    if (idx >= v->n.dim) {
+        longjmp(fth_jmpbuf, 3);
+    }
+
+    return &v->p.body[idx];
+}
+
+void fth_set(F f)  {       *fth_get_var_address() = POP; }
+void fth_get(F f)  {  PUSH(*fth_get_var_address()); }
+void fth_seti(F f) {       *fth_get_array_address() = POP; }
+void fth_geti(F f) {  PUSH(*fth_get_array_address()); }
+
+static void fth_get_input_char(F f)
+{
+    static last_c;
+    char c;
+
+    // Line numbers aren't bumped until we're actually reading
+    // the character -after- a new line.
+    if (last_c == '\n') {
+        f->input_line_cnt ++;
+        f->input_char_cnt = 0;
+    }
+    f->input_char_cnt ++;
+
+    if (f->input_offset >= f->input_len) return EOF;
+    last_c = c = f->input[f->input_offset++];
+
+    return c;
+}
+
+static void fth_parse(F f, char delim) // delim --
+{
+    f->token_start = f->input_offset;
+
+    do {
+        c = fth_get_input_char(f);
+        if (delim == ' ' && isspace(c))
+            break;
+        else if (delim == c)
+            break;
+    } while (1);
+
+    f->token_end = f->input_offset -1; // Do not include delimeter
+}
+
+static void fth_token(F f)
+{
+    char c;
+
+    f->token[0] = 0;
+
+    do {
+        c = fth_get_input_char(f);
+
+        if (c == EOF) return;
+    } while (isspace(c));
+
+    fth_parse(f, ' ');
+}
+
+void fth_process_input_line(F f, char *input, int len)
+{
+    f->input = input;
+    f->input_len = len;
+
+    f->input_offset = 0;
+    f->input_line_cnt = 1;
+    f->input_char_cnt = 0;
+
+    f->in_colon = 0;
+    f->
