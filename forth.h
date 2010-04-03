@@ -70,6 +70,7 @@ typedef struct fth_environment_s {
     int input_char_cnt; // Char number of input {relative to last cr}
 
     // Start and end of token in the input stream
+    char token_string[
     int token_start, token_end;
     // Where in input stream did this token occur?
     int token_line_num, token_char_cnt;
@@ -123,10 +124,10 @@ enum {
 
 enum {
     F_NOERR,
-    F_STACK_UNDERRUN,
-    F_STACK_OVERFLOW,
-    F_RETURN_STACK_UNDERRUN,
-    F_RETURN_STACK_OVERFLOW,
-    F_LOOP_STACK_UNDERRUN,
-    F_LOOP_STACK_OVERFLOW,
+    FERR_STACK_UNDERRUN,
+    FERR_STACK_OVERFLOW,
+    FERR_RETURN_STACK_UNDERRUN,
+    FERR_RETURN_STACK_OVERFLOW,
+    FERR_LOOP_STACK_UNDERRUN,
+    FERR_LOOP_STACK_OVERFLOW,
 };

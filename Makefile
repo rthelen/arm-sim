@@ -5,7 +5,7 @@
 # reversed. (See the file COPYRIGHT for details.)
 #
 
-SRC  = sim.c memory.c io.c file.c warn.c dtc.c decode.c disassemble.c execute.c arm.c undo.c forth.c
+SRC  = sim.c memory.c io.c file.c warn.c dtc.c decode.c disassemble.c execute.c arm.c undo.c
 OBJS = $(patsubst %.c, objects/%.o, ${SRC})
 INCL = sim.h arm.h
 

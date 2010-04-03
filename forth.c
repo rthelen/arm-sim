@@ -276,26 +276,35 @@ static void fth_get_input_char(F f)
     return c;
 }
 
+static void fth_parse_end(F f, int cons_char)
+{
+    if (cons_char) {
+        f->token_end = f->input_offset -1;
+    } else {
+        f->token_end = f->input_offset;
+    }
+}
+
 static void fth_parse(F f, char delim) // delim --
 {
     f->token_start = f->input_offset;
 
     do {
         c = fth_get_input_char(f);
+        if (c == EOF)
+            return fth_parse_end(f, 0);
         if (delim == ' ' && isspace(c))
-            break;
+            return fth_parse_end(f, 1);
         else if (delim == c)
-            break;
+            return fth_parse_end(f, 1);
     } while (1);
-
-    f->token_end = f->input_offset -1; // Do not include delimeter
 }
 
 static void fth_token(F f)
 {
     char c;
 
-    f->token[0] = 0;
+    f->token_start = f->token_end = -1;
 
     do {
         c = fth_get_input_char(f);
@@ -304,6 +313,9 @@ static void fth_token(F f)
     } while (isspace(c));
 
     fth_parse(f, ' ');
+
+    int i = f->token_start;
+    char *p = f->token 
 }
 
 void fth_process_input_line(F f, char *input, int len)
@@ -316,4 +328,20 @@ void fth_process_input_line(F f, char *input, int len)
     f->input_char_cnt = 0;
 
     f->in_colon = 0;
-    f->
+    f->code_offset = 0;
+
+    while (f->input_offset < f->input_len) {
+        fth_token(f);
+        if (f->token_start == -1) break;
+        fth_header_t *w = fth_lookup_token(f);
+        if (!w) {
+            cell n;
+            fth_assert(f, fth_number_token(f, &n), FERR_INVALID_TOKEN,
+                       "Word %s wasn't found in the dictionary and doesn't look like a number", 
+                
+        }
+        fth_process_token(f);
+    }
+
+    fth_execute_input(f);
+}
