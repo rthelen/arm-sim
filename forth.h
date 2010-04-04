@@ -5,6 +5,8 @@
  * reversed. (See the file COPYRIGHT for details.)
  */
 
+#include <setjmp.h>
+
 typedef  reg  cell;
 typedef sreg scell;
 
@@ -14,26 +16,28 @@ typedef sreg scell;
 
 #define MAX_HEADER_NAME_SZ			32
 
-typedef struct fth_header_s fth_header_t;
-typedef void (*word_t)(fth_header_t *word_header);
-typedef union fth_body_u {
-    fth_header_t	*word;
+typedef struct forth_environment_s forth_environment_t;
+typedef forth_environment_t *F;
+typedef struct forth_header_s forth_header_t;
+typedef void (*forth_code_word_t)(F f, forth_header_t *word_header);
+typedef union forth_body_u {
+    forth_header_t	*word;
     int				 br_offset; // offset relative to current body cell for a branch
     cell			 cons;      // constant for literal
-} fth_body_t;
+} forth_body_t;
 
-struct fth_header_s {
-    char			 name[MAX_HEADER_NAME_SZ];
-    fth_header_t	*prev;
-    word_t			 func;
+struct forth_header_s {
+    char				 name[MAX_HEADER_NAME_SZ];
+    forth_code_word_t	 func;
+    forth_header_t		*prev;
     union {
-        cell		 var;    // Var
-        cell		 cons;   // Constant
-        int			 dim;    // Dimension of array
+        cell			 var;    // Var
+        cell			 cons;   // Constant
+        int				 dim;    // Dimension of array
     } n;
     union {
-        fth_body_t	*body;   // Points to the contents of the word body
-        cell		*val;    // Points to the contents of an array
+        forth_body_t	*body;   // Points to the contents of the word body
+        cell			*array;    // Points to the contents of an array
     } p;
 };
 
@@ -46,9 +50,9 @@ struct fth_header_s {
 #define RSTACK_SIZE     64
 #define LSTACK_SIZE     16
 
-typedef struct fth_environment_s {
-    fth_header_t *dictionary_head;
-    fth_header_t *breakpoints[MAX_BREAK_POINTS];
+struct forth_environment_s {
+    forth_header_t *dictionary_head;
+    forth_header_t *breakpoints[MAX_BREAK_POINTS];
 
     int err_num;
     char *err_str;
@@ -57,20 +61,20 @@ typedef struct fth_environment_s {
     int sp;            /* parameter stack pointer */
     int rp;            /* return stack pointer */
     int lp;            /* loop stack pointer */
-    fth_body_t *ip;     /* instruction pointer */
+    forth_body_t *ip;     /* instruction pointer */
 
     cell         stack[STACK_SIZE];
-    fth_body_t *rstack[RSTACK_SIZE];
+    forth_body_t *rstack[RSTACK_SIZE];
     int         lstack[LSTACK_SIZE];
 
     char *input;
     int input_len;
     int input_offset;
     int input_line_cnt; // Line number of input {used with files}
-    int input_char_cnt; // Char number of input {relative to last cr}
+    int input_line_begin_offset; // Char number of input {relative to last cr}
 
     // Start and end of token in the input stream
-    char token_string[
+    char token_string[66];
     int token_start, token_end;
     // Where in input stream did this token occur?
     int token_line_num, token_char_cnt;
@@ -79,34 +83,35 @@ typedef struct fth_environment_s {
      * Compiling variables
      */
     int in_colon;
-    fth_body_t code[MAX_INPUT_CODE_SZ];
+    forth_body_t code[MAX_INPUT_CODE_SZ];
     int code_offset;
-} fth_environment_t;
-typedef fth_environment_t *F;
+};
 
 #define SP		(f->sp)
 #define RP		(f->rp)
 #define LP		(f->lp)
 #define IP		(f->ip)
 
-#define RPUSH(n)  fth_rpush(f, n)
-#define RPOP      fth_rpop(f)
+#define RPUSH(n)  rpush(f, n)
+#define RPOP      rpop(f)
 
-#define LPUSH(n)  fth_lpush(f, n)
-#define LPOP      fth_lpop(f)
+#define LPUSH(n)  lpush(f, n)
+#define LPOP      lpop(f)
 
+#define CALL(w)	  ((w)->func(f, w))
 #define NEST      RPUSH(IP)
 #define UNNEST    (IP = RPOP)
 
 #define MIN(a,b)    (((a) < (b)) ? (a) : (b))
 
-#define PUSH(v)	fth_push(f, v)
-#define POP     fth_pop(f)
-#define SPOP    fth_spop(f)
-#define DUP     fth_dup(f)
-#define DROP    fth_drop(f)
-#define SWAP    fth_swap(f)
-#define NIP     fth_nip(f)
+#define PUSH(v)	push(f, v)
+#define POP     pop(f)
+#define SPOP    spop(f)
+
+#define DUP     fword_dup(f)
+#define DROP    fword_drop(f)
+#define SWAP    fword_swap(f)
+#define NIP     fword_nip(f)
 
 /*
  * Stack identifiers
@@ -130,4 +135,8 @@ enum {
     FERR_RETURN_STACK_OVERFLOW,
     FERR_LOOP_STACK_UNDERRUN,
     FERR_LOOP_STACK_OVERFLOW,
+    FERR_INVALID_TOKEN,
 };
+
+F forth_new(void);
+void forth_process_input_line(F f, char *input, int len);

@@ -5,7 +5,7 @@
 # reversed. (See the file COPYRIGHT for details.)
 #
 
-SRC  = sim.c memory.c io.c file.c warn.c dtc.c decode.c disassemble.c execute.c arm.c undo.c
+SRC  = sim.c memory.c io.c file.c warn.c dtc.c decode.c disassemble.c execute.c arm.c undo.c forth.c
 OBJS = $(patsubst %.c, objects/%.o, ${SRC})
 INCL = sim.h arm.h
 
@@ -19,6 +19,9 @@ endif
 
 sim: ${OBJS} ${INCL}
 	cc ${OBJS} -o $@
+
+fword_dict.c : forth.c
+	sed -E -f gen_dict_chain.sed < forth.c > fword_dict.c
 
 .PHONY: objects
 objects:
