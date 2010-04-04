@@ -25,12 +25,9 @@
 /^#(if|else|endif)/p
 
 # lose lines *not* starting with "void fword_"
-/^void fword_/!d
+/^void fword_imm_/!d
 
-# lose the immediate words
-/^void fword_imm_/d
-
-s/^void fword_//
+s/^void fword_imm_//
 s/(.*)\(F f\).*$/\1/
 
 # now we've got the name, save it in hold space
@@ -60,7 +57,7 @@ s/comma$/,/
 s/tick/'/
 s/exit/^/
 s/q/?/
-s/dot/./
+s/colon/:/
 s/forward/>/
 s/to(_|$)/>/
 s/from(_|$)/>/
@@ -79,5 +76,5 @@ H
 g
 
 # output final string for array initializer
-s/(.*)\n(.*)/	{ "\2", fword_\1 },/
+s/(.*)\n(.*)/	{ "\2", forth_imm_\1, 1 },/
 

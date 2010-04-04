@@ -51,9 +51,15 @@
 void ftest(void)
 {
     F f = forth_new();
-    char *input = "4 5 + dot";
+    char *input = "4 5 + .";
     forth_process_input_line(f, input, strlen(input));
 }
+
+/**********************************************************
+ *
+ * Error handling and Error checking words
+ *
+ **********************************************************/
 
 static void forth_err(F f, int err_num)
 {
@@ -116,6 +122,14 @@ static void forth_stack_check(F f, int stack_num)
     forth_assert(f, sp <= sz, err_under, "%s stack underflow", name);
 }
 
+/*
+ **********************************************************
+ *
+ * Stack Push/Pop routines
+ *
+ **********************************************************
+ **/
+
 void rpush(F f, forth_body_t *p) { forth_stack_check(f, F_RETURN_STACK); f->rstack[--RP] = p; }
 forth_body_t *rpop(F f)          { forth_stack_check(f, F_RETURN_STACK); return f->rstack[RP++]; }
 
@@ -126,10 +140,20 @@ static void push(F f, cell v)    { forth_stack_check(f, F_DATA_STACK);  f->stack
 cell pop(F f)              { forth_stack_check(f, F_DATA_STACK);  return f->stack[SP++]; }
 
 scell spop(F f)   { return (scell) POP; }
+
 void fword_dup(F f)     { cell a = POP; PUSH(a); PUSH(a); }
 void fword_drop(F f)    { POP; }
 void fword_swap(F f)    { cell a = POP; cell b = POP; PUSH(a); PUSH(b); }
 void fword_nip(F f)     { SWAP; DROP; }
+
+void fword_2drop(F f)  { POP; POP; }
+void fword_over(F f)   { cell b = POP; cell a = POP; PUSH(a); PUSH(b); PUSH(a); } /* a b -> a b a */
+
+/**********************************************************
+ *
+ * Arithmetic operators
+ *
+ **********************************************************/
 
 void fword_plus(F f)    { PUSH(SPOP + SPOP); }
 void fword_sub(F f)     { PUSH(-SPOP + SPOP); }
@@ -150,21 +174,19 @@ void fword_shift_left(F f)    { cell cnt = POP,       n =  POP; PUSH(n << cnt); 
 void fword_shift_right(F f)   { cell cnt = POP; scell n = SPOP; PUSH(n >> cnt); }
 void fword_ushift_right(F f)  { cell cnt = POP; cell  n =  POP; PUSH(n >> cnt); }
 
-void fword_fetch(F f)   { PUSH(mem_load(POP, 0)); }
-void fword_cfetch(F f)  { PUSH(mem_loadb(POP, 0)); }
-
-void fword_store(F f)       { cell addr = POP, v = POP; mem_store(addr, 0, v); }
-void fword_cstore(F f)      { cell addr = POP, v = POP; mem_storeb(addr, 0, v); }
-void fword_plus_store(F f)  { cell addr = POP, v = POP; mem_store(mem_load(addr, 0), 0, v); }
-
-void fword_2drop(F f)  { POP; POP; }
-void fword_over(F f)   { cell b = POP; cell a = POP; PUSH(a); PUSH(b); PUSH(a); } /* a b -> a b a */
-
 void fword_uless(F f)  {  cell b =  POP;  cell a =  POP; PUSH(a < b ? -1 : 0); }
 void fword_less(F f)   { scell b = SPOP; scell a = SPOP; PUSH(a < b ? -1 : 0); }
 
 void fword_zero_less(F f)   { PUSH(SPOP <  0 ? -1 : 0); }
 void fword_zero_equal(F f)  { PUSH( POP == 0 ? -1 : 0); }
+
+/*
+ **********************************************************
+ *
+ * Multiply and Divide
+ *
+ **********************************************************
+ **/
 
 void fword_uslash_mod(F f)  /* u1 u2 -- um uq */
 {
@@ -226,24 +248,117 @@ void fword_slash_mod(F f)  /* n1 n2 -- m q */
     PUSH(quot);
 }
 
-void fword_dot(F f) { printf("%x ", POP); }
+/*
+ **********************************************************
+ *
+ * Store and Fetch
+ *
+ **********************************************************
+ **/
+void fword_fetch(F f)   { PUSH(mem_load(POP, 0)); }
+void fword_cfetch(F f)  { PUSH(mem_loadb(POP, 0)); }
+
+void fword_store(F f)       { cell addr = POP, v = POP; mem_store(addr, 0, v); }
+void fword_cstore(F f)      { cell addr = POP, v = POP; mem_storeb(addr, 0, v); }
+void fword_plus_store(F f)  { cell addr = POP, v = POP; mem_store(mem_load(addr, 0), 0, v); }
+
 
 /*
- * The Dictionary
+ **********************************************************
+ *
+ * Printing routines
+ *
+ **********************************************************
+ **/
+
+void fword_dot(F f) { printf("%x ", POP); }
+
+
+/*
+ * Declare static words
  */
+static int forth_number_token(F f, cell *n);
+
+
+/*
+ **********************************************************
+ *
+ * The Dictionary
+ *
+ **********************************************************
+ **/
+
 struct dict_s {
     char *name;
     void (*code)(F f);
 };
 
+#include "fword_decls.c"
 static struct dict_s fword_dict[] = {
 #include "fword_dict.c"
+#include "fword_imm_dict.c"
     { NULL, NULL}
 };
+
+/*
+ * Headers
+ */
+
+
+/*
+ **********************************************************
+ *
+ * Compiling Words
+ *
+ **********************************************************
+ **/
+
+void forth_compile_word(F f, forth_header_t *w)
+{
+    f->code[f->code_offset++].word = w;
+}
+
+void forth_compile_cons(F f, cell n)
+{
+    f->code[f->code_offset++].cons = n;
+}
+
+
+/*
+ **********************************************************
+ *
+ * Run time words for var, cons, lit, etc.
+ *
+ **********************************************************
+ **/
 
 void forth_do_var(F f, forth_header_t *v) { PUSH(v->n.var); }
 void forth_do_cons(F f, forth_header_t *c) { PUSH(c->n.cons); }
 void forth_do_lit(F f, forth_header_t *u) { PUSH(IP++ -> cons); }
+forth_header_t forth_do_lit_header = { "(lit)", forth_do_lit };
+void forth_immediate(F f, forth_header_t *w)
+{
+    cell n;
+    
+    int is_number = forth_number_token(f, &n);
+
+    /*
+     * This is a last chance word.  If it's not a number, then
+     * break out.
+     */
+
+    forth_assert(f, is_number, FERR_INVALID_TOKEN,
+                 "Word %s wasn't found in the dictionary "
+                 "and doesn't look like a number", f->token_string);
+
+    /*
+     * Else, put code into the stream to push the number at run time
+     */
+
+    forth_compile_word(f, &forth_do_lit_header);
+    forth_compile_cons(f, n);
+}
+    
 void forth_do_array(F f, forth_header_t *a)
 {
     cell idx = POP;
@@ -254,12 +369,10 @@ void forth_do_array(F f, forth_header_t *a)
     PUSH(a->p.array[idx]);
 }
 
-forth_header_t forth_lit_header = { "(lit)", forth_do_lit };
-
 static cell *forth_get_var_address(F f)
 {
     forth_header_t *v = IP++ -> word;
-    if (v->func != forth_do_var) {
+    if (v->code != forth_do_var) {
         forth_err(f, 55);
     }
 
@@ -269,7 +382,7 @@ static cell *forth_get_var_address(F f)
 static cell *forth_get_array_address(F f)
 {
     forth_header_t *v = IP++ -> word;
-    if (v->func != forth_do_array) {
+    if (v->code != forth_do_array) {
         forth_err(f, 55);
     }
 
@@ -422,14 +535,27 @@ void forth_do_colon(F f, forth_header_t *w)
         CALL(w);
     } while (RP < rp_saved);
 }
-forth_header_t forth_colon_header = { "(do-colon)", forth_do_colon };
 
 
 void forth_do_exit(F f, forth_header_t *w)
 {
     UNNEST;
 }
+
+
 forth_header_t forth_exit_header = { "(exit)", forth_do_exit };
+
+void forth_imm_semicolon(F f, forth_header_t *w)
+{
+    // Compile an exit word
+    forth_compile_word(f, &forth_exit_header);
+    // Malloc space for the freshly compiled word.
+    
+}
+
+forth_header_t forth_immediate_header = { "(lit)", forth_immediate, 1 };
+forth_header_t forth_colon_header = { "(do-colon)", forth_do_colon };
+forth_header_t forth_imm_semicolon_header = { ";", forth_imm_semicolon };
 
 
 void forth_process_input_line(F f, char *input, int len)
@@ -448,19 +574,21 @@ void forth_process_input_line(F f, char *input, int len)
         forth_token(f);
         if (f->token_start == -1) break;
         forth_header_t *w = forth_lookup_token(f);
-        if (w) {
-            f->code[f->code_offset++].word = w;
-        } else {
-            cell n;
-            forth_assert(f, forth_number_token(f, &n), FERR_INVALID_TOKEN,
-                       "Word %s wasn't found in the dictionary and doesn't look like a number", f->token_string);
-            f->code[f->code_offset++].word = &forth_lit_header;
-            f->code[f->code_offset++].cons = n;
-        } 
+        if (!w) w = &forth_immediate_header;
+        if (w->immediate)
+            w->code(f, w);
+        else
+            forth_compile_word(f, w);
     }
 
-    f->code[f->code_offset++].word = &forth_exit_header;
-    forth_header_t anon_input_word = { "(input-buffer)", forth_do_colon, NULL, { 0 }, { f->code } };
+    forth_compile_word(f, &forth_exit_header);
+
+    forth_header_t anon_input_word = { /* name */ "(input-buffer)",
+                                       /* code */ forth_do_colon,
+                                       /* immediate */ 0,
+                                       /* prev ptr */ NULL,
+                                       /* n: var */{ 0 },
+                                       /* p: body */ { f->code } };
     CALL(&anon_input_word);
 }
 
@@ -475,7 +603,7 @@ F forth_new(void)
         assert(strlen(d->name) + 1 < MAX_HEADER_NAME_SZ);
         memcpy(p->name, d->name, strlen(d->name) + 1);
         p->prev = last_p;
-        p->func = (forth_code_word_t) (d->code);
+        p->code = (forth_code_word_t) (d->code);
         p->n.var = 0;
         p->p.body = NULL;
         last_p = p;

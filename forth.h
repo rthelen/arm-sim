@@ -28,7 +28,8 @@ typedef union forth_body_u {
 
 struct forth_header_s {
     char				 name[MAX_HEADER_NAME_SZ];
-    forth_code_word_t	 func;
+    forth_code_word_t	 code;
+    int					 immediate;
     forth_header_t		*prev;
     union {
         cell			 var;    // Var
@@ -82,7 +83,8 @@ struct forth_environment_s {
     /*
      * Compiling variables
      */
-    int in_colon;
+    int in_colon, colon_offset_start;
+    forth_header_t *colon_header;
     forth_body_t code[MAX_INPUT_CODE_SZ];
     int code_offset;
 };
@@ -98,7 +100,7 @@ struct forth_environment_s {
 #define LPUSH(n)  lpush(f, n)
 #define LPOP      lpop(f)
 
-#define CALL(w)	  ((w)->func(f, w))
+#define CALL(w)	  ((w)->code(f, w))
 #define NEST      RPUSH(IP)
 #define UNNEST    (IP = RPOP)
 
