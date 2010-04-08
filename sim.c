@@ -90,6 +90,8 @@ void canonicalise_path(char *path)
         path[len-1] = '\0';
 }
 
+
+int sim_done;
 int main(int argc, char *argv[])
 {
     char *filename = "FORTH.img";
