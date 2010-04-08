@@ -51,8 +51,8 @@
 void ftest(void)
 {
     F f = forth_new();
-    char *input = "4 5 + .";
-    forth_process_input_line(f, input, strlen(input));
+    char *input = "4 5 + . 10 emit 13 emit";
+    forth_process_input(f, input, strlen(input));
 }
 
 /**********************************************************
@@ -141,13 +141,20 @@ cell pop(F f)              { forth_stack_check(f, F_DATA_STACK);  return f->stac
 
 scell spop(F f)   { return (scell) POP; }
 
-void fword_dup(F f)     { cell a = POP; PUSH(a); PUSH(a); }
-void fword_drop(F f)    { POP; }
-void fword_swap(F f)    { cell a = POP; cell b = POP; PUSH(a); PUSH(b); }
-void fword_nip(F f)     { SWAP; DROP; }
+/*
+ * DUP has a custom header because it is the first word in the dictionary
+ * and points to NULL.
+ */
 
-void fword_2drop(F f)  { POP; POP; }
-void fword_over(F f)   { cell b = POP; cell a = POP; PUSH(a); PUSH(b); PUSH(a); } /* a b -> a b a */
+FORTH_FUNCTION(fword_dup, "dup", 0, NULL)
+                          { cell a = POP; PUSH(a); PUSH(a); }
+FWORD(drop, dup)          { POP; }
+FWORD(swap, drop)         { cell a = POP; cell b = POP; PUSH(a); PUSH(b); }
+FWORD(nip, swap)          { SWAP; DROP; }
+FWORD(2drop, nip)         { POP; POP; }
+
+            /* over:  a b -> a b a */
+FWORD(over, 2drop)        { cell b = POP; cell a = POP; PUSH(a); PUSH(b); PUSH(a); }
 
 /**********************************************************
  *
@@ -155,30 +162,41 @@ void fword_over(F f)   { cell b = POP; cell a = POP; PUSH(a); PUSH(b); PUSH(a); 
  *
  **********************************************************/
 
-void fword_plus(F f)    { PUSH(SPOP + SPOP); }
-void fword_sub(F f)     { PUSH(-SPOP + SPOP); }
-void fword_star(F f)    { PUSH(SPOP * SPOP); }
-void fword_slash(F f)   { SWAP; PUSH(SPOP / SPOP); }
-void fword_and(F f)     { PUSH(POP & POP); }
-void fword_or(F f)      { PUSH(POP | POP); }
-void fword_xor(F f)     { PUSH(POP ^ POP); }
+FWORD3(plus, "+", 2drop)    { PUSH(SPOP + SPOP); }
+FWORD3(sub, "-", plus)      { PUSH(-SPOP + SPOP); }
+FWORD3(star, "*", sub)      { PUSH(SPOP * SPOP); }
+FWORD3(slash, "/", star)    { SWAP; PUSH(SPOP / SPOP); }
+FWORD3(and, "and", slash)   { PUSH(POP & POP); }
+FWORD3(or, "or", and)       { PUSH(POP | POP); }
+FWORD3(xor, "xor", or)      { PUSH(POP ^ POP); }
 
-void fword_negate(F f)   { PUSH(-SPOP); }
-void fword_invert(F f)   { PUSH(~SPOP); }
+FWORD3(negate, "negate", xor)      { PUSH(-SPOP); }
+FWORD3(invert, "invert", negate)   { PUSH(~SPOP); }
 
-void fword_2star(F f)    { PUSH(SPOP << 1); }
-void fword_2slash(F f)   { PUSH(SPOP >> 1); }
-void fword_u2slash(F f)  { PUSH(POP >> 1); }
+FWORD3(2star, "2*", negate)        { PUSH(SPOP << 1); }
+FWORD3(2slash, "2/", 2star)        { PUSH(SPOP >> 1); }
+FWORD3(u2slash, "u2/", 2slash)     { PUSH(POP >> 1); }
 
-void fword_shift_left(F f)    { cell cnt = POP,       n =  POP; PUSH(n << cnt); }
-void fword_shift_right(F f)   { cell cnt = POP; scell n = SPOP; PUSH(n >> cnt); }
-void fword_ushift_right(F f)  { cell cnt = POP; cell  n =  POP; PUSH(n >> cnt); }
+FWORD3(shift_left, "<<", u2slash)
+{ cell cnt = POP,       n =  POP; PUSH(n << cnt); }
 
-void fword_uless(F f)  {  cell b =  POP;  cell a =  POP; PUSH(a < b ? -1 : 0); }
-void fword_less(F f)   { scell b = SPOP; scell a = SPOP; PUSH(a < b ? -1 : 0); }
+FWORD3(shift_right, ">>", shift_left)
+{ cell cnt = POP; scell n = SPOP; PUSH(n >> cnt); }
 
-void fword_zero_less(F f)   { PUSH(SPOP <  0 ? -1 : 0); }
-void fword_zero_equal(F f)  { PUSH( POP == 0 ? -1 : 0); }
+FWORD3(ushift_right, "u>>", shift_right)
+{ cell cnt = POP; cell  n =  POP; PUSH(n >> cnt); }
+
+FWORD3(uless, "u<", ushift_right)
+{  cell b =  POP;  cell a =  POP; PUSH(a < b ? -1 : 0); }
+
+FWORD3(less, "<", uless)
+{ scell b = SPOP; scell a = SPOP; PUSH(a < b ? -1 : 0); }
+
+FWORD3(zero_less, "0<", less)
+{ PUSH(SPOP <  0 ? -1 : 0); }
+
+FWORD3(zero_equal, "=", zero_less)
+{ PUSH( POP == 0 ? -1 : 0); }
 
 /*
  **********************************************************
@@ -188,7 +206,7 @@ void fword_zero_equal(F f)  { PUSH( POP == 0 ? -1 : 0); }
  **********************************************************
  **/
 
-void fword_uslash_mod(F f)  /* u1 u2 -- um uq */
+FWORD3(uslash_mod, "u/mod", zero_equal)  /* u1 u2 -- um uq */
 {
     cell top = POP;
     cell st1 = POP;
@@ -223,7 +241,7 @@ void fword_uslash_mod(F f)  /* u1 u2 -- um uq */
  * and q,r are the symmetric quotient and remainder.
  *
  */
-void fword_slash_mod(F f)  /* n1 n2 -- m q */
+FWORD3(slash_mod, "/mod", uslash_mod)  /* n1 n2 -- m q */
 {
     scell top = POP;
     scell st1 = POP;
@@ -255,12 +273,13 @@ void fword_slash_mod(F f)  /* n1 n2 -- m q */
  *
  **********************************************************
  **/
-void fword_fetch(F f)   { PUSH(mem_load(POP, 0)); }
-void fword_cfetch(F f)  { PUSH(mem_loadb(POP, 0)); }
 
-void fword_store(F f)       { cell addr = POP, v = POP; mem_store(addr, 0, v); }
-void fword_cstore(F f)      { cell addr = POP, v = POP; mem_storeb(addr, 0, v); }
-void fword_plus_store(F f)  { cell addr = POP, v = POP; mem_store(mem_load(addr, 0), 0, v); }
+FWORD3(fetch, "@", slash_mod)  { PUSH(mem_load(POP, 0)); }
+FWORD3(cfetch, "c@", fetch)    { PUSH(mem_loadb(POP, 0)); }
+
+FWORD3(store, "!", cfetch)        { cell addr = POP, v = POP; mem_store(addr, 0, v); }
+FWORD3(cstore, "c!", store)       { cell addr = POP, v = POP; mem_storeb(addr, 0, v); }
+FWORD3(plus_store, "+!", cstore)  { cell addr = POP, v = POP; mem_store(mem_load(addr, 0), 0, v); }
 
 
 /*
@@ -271,38 +290,14 @@ void fword_plus_store(F f)  { cell addr = POP, v = POP; mem_store(mem_load(addr,
  **********************************************************
  **/
 
-void fword_dot(F f) { printf("%x ", POP); }
+FWORD3(dot, ".", plus_store)      { printf("%x ", POP); }
+FWORD(emit, dot)                  { printf("%c", POP); }
 
 
 /*
  * Declare static words
  */
 static int forth_number_token(F f, cell *n);
-
-
-/*
- **********************************************************
- *
- * The Dictionary
- *
- **********************************************************
- **/
-
-struct dict_s {
-    char *name;
-    void (*code)(F f);
-};
-
-#include "fword_decls.c"
-static struct dict_s fword_dict[] = {
-#include "fword_dict.c"
-#include "fword_imm_dict.c"
-    { NULL, NULL}
-};
-
-/*
- * Headers
- */
 
 
 /*
@@ -332,11 +327,11 @@ void forth_compile_cons(F f, cell n)
  **********************************************************
  **/
 
-void forth_do_var(F f, forth_header_t *v) { PUSH(v->n.var); }
-void forth_do_cons(F f, forth_header_t *c) { PUSH(c->n.cons); }
-void forth_do_lit(F f, forth_header_t *u) { PUSH(IP++ -> cons); }
-forth_header_t forth_do_lit_header = { "(lit)", forth_do_lit };
-void forth_immediate(F f, forth_header_t *w)
+FORTH_FUNCTION(forth_do_var, "(var)", 0, NULL)  { PUSH(w->n.var); }
+FORTH_DO(cons, var)                    { PUSH(w->n.cons); }
+FORTH_DO(lit, cons)                    { PUSH(IP++ -> cons); }
+
+FORTH_FUNCTION(forth_imm_number, "number_imm", 1, NULL)
 {
     cell n;
     
@@ -358,16 +353,6 @@ void forth_immediate(F f, forth_header_t *w)
     forth_compile_word(f, &forth_do_lit_header);
     forth_compile_cons(f, n);
 }
-    
-void forth_do_array(F f, forth_header_t *a)
-{
-    cell idx = POP;
-    if (idx >= a->n.dim) {
-        forth_err(f, 55);
-    }
-
-    PUSH(a->p.array[idx]);
-}
 
 static cell *forth_get_var_address(F f)
 {
@@ -382,11 +367,8 @@ static cell *forth_get_var_address(F f)
 static cell *forth_get_array_address(F f)
 {
     forth_header_t *v = IP++ -> word;
-    if (v->code != forth_do_array) {
-        forth_err(f, 55);
-    }
-
     cell idx = POP;
+
     if (idx >= v->n.dim) {
         forth_err(f, 55);
     }
@@ -394,10 +376,10 @@ static cell *forth_get_array_address(F f)
     return &v->p.array[idx];
 }
 
-void forth_set(F f)  {       *forth_get_var_address(f) = POP; }
-void forth_get(F f)  {  PUSH(*forth_get_var_address(f)); }
-void forth_seti(F f) {       *forth_get_array_address(f) = POP; }
-void forth_geti(F f) {  PUSH(*forth_get_array_address(f)); }
+FORTH_DO(set, lit)  {       *forth_get_var_address(f) = POP; }
+FORTH_DO(get, set)  {  PUSH(*forth_get_var_address(f)); }
+FORTH_DO(seti, get) {       *forth_get_array_address(f) = POP; }
+FORTH_DO(geti, seti) {  PUSH(*forth_get_array_address(f)); }
 
 static int forth_get_input_char(F f)
 {
@@ -524,7 +506,7 @@ static int forth_number_token(F f, cell *n)
  * finally returns to its value on entry.
  */
 
-void forth_do_colon(F f, forth_header_t *w)
+FORTH_DO(colon, geti)
 {
     int rp_saved = RP;
 
@@ -537,28 +519,22 @@ void forth_do_colon(F f, forth_header_t *w)
 }
 
 
-void forth_do_exit(F f, forth_header_t *w)
+FORTH_DO(exit, colon)
 {
     UNNEST;
 }
 
 
-forth_header_t forth_exit_header = { "(exit)", forth_do_exit };
-
-void forth_imm_semicolon(F f, forth_header_t *w)
+FORTH_IMM3(semicolon, ";", number)
 {
     // Compile an exit word
-    forth_compile_word(f, &forth_exit_header);
+    forth_compile_word(f, &forth_do_exit_header);
     // Malloc space for the freshly compiled word.
     
 }
 
-forth_header_t forth_immediate_header = { "(lit)", forth_immediate, 1 };
-forth_header_t forth_colon_header = { "(do-colon)", forth_do_colon };
-forth_header_t forth_imm_semicolon_header = { ";", forth_imm_semicolon };
 
-
-void forth_process_input_line(F f, char *input, int len)
+void forth_process_input(F f, char *input, int len)
 {
     f->input = input;
     f->input_len = len;
@@ -574,14 +550,14 @@ void forth_process_input_line(F f, char *input, int len)
         forth_token(f);
         if (f->token_start == -1) break;
         forth_header_t *w = forth_lookup_token(f);
-        if (!w) w = &forth_immediate_header;
+        if (!w) w = &forth_imm_number_header;
         if (w->immediate)
             w->code(f, w);
         else
             forth_compile_word(f, w);
     }
 
-    forth_compile_word(f, &forth_exit_header);
+    forth_compile_word(f, &forth_do_exit_header);
 
     forth_header_t anon_input_word = { /* name */ "(input-buffer)",
                                        /* code */ forth_do_colon,
@@ -596,21 +572,7 @@ F forth_new(void)
 {
     F f = calloc(1, sizeof(*f));
 
-    struct dict_s *d = fword_dict;
-    forth_header_t *last_p = NULL;
-    while (d->name && d->code) {
-        forth_header_t *p = calloc(1, sizeof(*p));
-        assert(strlen(d->name) + 1 < MAX_HEADER_NAME_SZ);
-        memcpy(p->name, d->name, strlen(d->name) + 1);
-        p->prev = last_p;
-        p->code = (forth_code_word_t) (d->code);
-        p->n.var = 0;
-        p->p.body = NULL;
-        last_p = p;
-        d++;
-    }
-
-    f->dictionary_head = last_p;
+    f->dictionary_head = &fword_emit_header;
     f->sp = STACK_SIZE;
     f->rp = RSTACK_SIZE;
     f->lp = LSTACK_SIZE;

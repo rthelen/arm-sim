@@ -110,10 +110,10 @@ struct forth_environment_s {
 #define POP     pop(f)
 #define SPOP    spop(f)
 
-#define DUP     fword_dup(f)
-#define DROP    fword_drop(f)
-#define SWAP    fword_swap(f)
-#define NIP     fword_nip(f)
+#define DUP     fword_dup(f, w)
+#define DROP    fword_drop(f, w)
+#define SWAP    fword_swap(f, w)
+#define NIP     fword_nip(f, w)
 
 /*
  * Stack identifiers
@@ -141,4 +141,28 @@ enum {
 };
 
 F forth_new(void);
-void forth_process_input_line(F f, char *input, int len);
+void forth_process_input(F f, char *input, int len);
+
+
+#define FORTH_FUNCTION(_name, _str, _imm, _prev)                     \
+    void _name(F f, forth_header_t *w);                              \
+    forth_header_t _name ## _header = { _str, _name, _imm, _prev };  \
+    void _name(F f, forth_header_t *w)
+
+#define FWORD3(_name, _str, _prev)                    \
+    FORTH_FUNCTION(fword_ ## _name, _str, 0, &fword_ ## _prev ## _header)
+
+#define FWORD(_name, _prev)                           \
+    FWORD3(_name, # _name, _prev)
+
+#define FORTH_DO3(_name, _str, _prev)                 \
+    FORTH_FUNCTION(forth_do_ ## _name, _str, 0, &forth_do_ ## _prev ## _header)
+
+#define FORTH_DO(_name, _prev)                        \
+    FORTH_DO3(_name, "(" # _name ")", _prev)
+
+#define FORTH_IMM3(_name, _str, _prev)                \
+    FORTH_FUNCTION(forth_imm_ ## _name, _str, 1, &forth_imm_ ## _prev ## _header)
+
+#define FORTH_IMM(_name, _prev)                       \
+    FORTH_IMM3(_name, # _name "_imm", _prev)
