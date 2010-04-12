@@ -51,11 +51,14 @@
 void ftest(void)
 {
     F f = forth_new();
-    char *input = ": cr 10 emit 13 emit ; "
-                  " : star 42 emit ; "
-                  " : .n dup if . else drop star then ; "
-                  "4 5 + .n cr "
-                  "5 5 - .n cr ";
+    char *input =
+        ": cr 10 emit 13 emit ; "
+        "5 1 do i . loop cr "
+        ": star 42 emit ; "
+        "10 1 do i 0 do star loop cr loop "
+        ": .n dup if . else drop star then ; "
+        "4 5 + .n cr "
+        "5 5 - .n cr ";
     forth_process_input(f, input, strlen(input));
 }
 
@@ -113,7 +116,7 @@ static void forth_stack_check(F f, int stack_num)
         err_under = FERR_LOOP_STACK_UNDERRUN;
         err_over  = FERR_LOOP_STACK_OVERFLOW;
         sp = LP;
-        sz = LSTACK_SIZE;
+        sz = LOOP_STACK_SIZE;
         name = "loop";
         break;
         
@@ -145,8 +148,8 @@ static void forth_stack_check(F f, int stack_num)
 void rpush(F f, forth_body_t *p) { forth_stack_check(f, F_RETURN_STACK); f->rstack[--RP] = p; }
 forth_body_t *rpop(F f)          { forth_stack_check(f, F_RETURN_STACK); return f->rstack[RP++]; }
 
-void lpush(F f, int n)           { forth_stack_check(f, F_LOOP_STACK); f->lstack[--LP] = n; }
-int lpop(F f)                    { forth_stack_check(f, F_LOOP_STACK); return f->lstack[LP++]; }
+void lpush(F f, forth_loop_t l)  { forth_stack_check(f, F_LOOP_STACK); f->lstack[--LP] = l; }
+forth_loop_t lpop(F f)           { forth_stack_check(f, F_LOOP_STACK); return f->lstack[LP++]; }
 
 static void push(F f, cell v)    { forth_stack_check(f, F_DATA_STACK);  f->stack[--SP] = v; }
 cell pop(F f)              { forth_stack_check(f, F_DATA_STACK);  return f->stack[SP++]; }
@@ -162,8 +165,7 @@ static void state_push(F f, forth_state_t state)
 static forth_state_t state_pop(F f)
 {
     forth_stack_check(f, F_STATE_STACK);
-    forth_state_t state = f->state_stack[(f->state_sp)++];
-    return state;
+    return f->state_stack[(f->state_sp)++];
 }
 
 static int forth_state(F f)
@@ -323,7 +325,7 @@ FWORD2(plus_store, "+!")  { cell addr = POP, v = POP; mem_store(mem_load(addr, 0
  **********************************************************
  **/
 
-FWORD2(dot, ".")      { printf("%x ", POP); }
+FWORD2(dot, ".")      { printf("%x ", POP); fflush(stdout); }
 FWORD(emit)           { printf("%c", POP); }
 
 
@@ -388,14 +390,14 @@ FWORD_DO(number)
      * Else, put code into the stream to push the number at run time
      */
 
-    forth_compile_word(f, &forth_do_lit_header);
+    forth_compile_word(f, &fword_do_lit_header);
     forth_compile_cons(f, n);
 }
 
 static cell *forth_get_var_address(F f)
 {
     forth_header_t *v = IP++ -> word;
-    if (v->code != forth_do_var) {
+    if (v->code != fword_do_var) {
         forth_err(f, 55);
     }
 
@@ -546,7 +548,7 @@ static int forth_number_token(F f, cell *n)
 
 
 /*
- * forth_do_colon()
+ * colon()
  *
  * Continue executing words until an exit pops an IP and the RP
  * finally returns to its value on entry.
@@ -580,7 +582,7 @@ FWORD_DO(branch)
 FWORD_DO(zbranch)
 {
     if (POP == 0) {
-        forth_do_branch(f, w);
+        fword_do_branch(f, w);
     } else {
         IP ++;  // Skip branch offset
     }
@@ -588,8 +590,11 @@ FWORD_DO(zbranch)
 
 static void forth_mark(F f, forth_header_t *branch_word, int state_type)
 {
-    forth_compile_word(f, branch_word);
-    forth_compile_offset(f, 0); // Unknown at this time
+    if (branch_word) {
+        forth_compile_word(f, branch_word);
+        forth_compile_offset(f, 0); // Unknown at this time
+    }
+
     forth_state_t mark = { state_type, f->code_offset };
     state_push(f, mark);
 }
@@ -605,9 +610,15 @@ static int forth_resolve(F f, int state_type)
     return mark.offset;
 }
 
+static void forth_back_branch(F f, forth_header_t *branch_word, int target_offset)
+{
+    forth_compile_word(f, branch_word);
+    forth_compile_offset(f, - (f->code_offset + 1 - target_offset));
+}
+
 FWORD_IMM(if)
 {
-    forth_mark(f, &forth_do_zbranch_header, F_STATE_IF);
+    forth_mark(f, &fword_do_zbranch_header, F_STATE_IF);
 }
 
 FWORD_IMM(else)
@@ -616,7 +627,7 @@ FWORD_IMM(else)
                  FERR_MISMATCHED_CONTROL,
                  "else must follow an if");
     forth_state_t if_mark = state_pop(f);
-    forth_mark(f, &forth_do_branch_header, F_STATE_IF);
+    forth_mark(f, &fword_do_branch_header, F_STATE_IF);
     state_push(f, if_mark);
     forth_resolve(f, F_STATE_IF);
 }
@@ -624,6 +635,49 @@ FWORD_IMM(else)
 FWORD_IMM(then)
 {
     forth_resolve(f, F_STATE_IF);
+}
+
+FWORD_DO(do)
+{
+    int start = POP;
+    int limit = POP;
+    forth_loop_t do_loop = { start, limit };
+    lpush(f, do_loop);
+}
+
+FWORD_DO(loop)
+{
+    forth_loop_t do_loop = lpop(f);
+    do_loop.index ++;
+    if (do_loop.index >= do_loop.limit) {
+        IP ++;
+    } else {
+        lpush(f, do_loop);
+        fword_do_branch(f, w);
+    }
+}
+
+FWORD(i)
+{
+    forth_loop_t do_loop = lpop(f);
+    push(f, do_loop.index);
+    lpush(f, do_loop);
+}    
+
+
+FWORD_IMM(do)
+{
+    forth_compile_word(f, &fword_do_do_header);
+    forth_mark(f, NULL, F_STATE_DO);
+}
+
+FWORD_IMM(loop)
+{
+    forth_assert(f, forth_state(f) == F_STATE_DO,
+                 FERR_MISMATCHED_CONTROL,
+                 "loop must follow a do");
+    forth_state_t do_mark = state_pop(f);
+    forth_back_branch(f, &fword_do_loop_header, do_mark.offset);
 }
     
 
@@ -636,12 +690,12 @@ FWORD_IMM2(colon, ":")
     assert(f->colon_header == NULL);
 
     // Switch the compiler on
-    forth_mark(f, &forth_do_branch_header, F_STATE_COLON);
+    forth_mark(f, &fword_do_branch_header, F_STATE_COLON);
     forth_assert(f, forth_token(f), FERR_NEED_MORE_INPUT, "");
     forth_header_t *p = calloc(1, sizeof(forth_header_t));
     bcopy(f->token_string, &p->name[0], MAX_HEADER_NAME_SZ);
     p->name[MAX_HEADER_NAME_SZ-1] = '\0'; // Just in case
-    p->code = forth_do_colon;
+    p->code = fword_do_colon;
     p->immediate = 0;
     p->prev = f->dictionary_head;
     f->colon_header = p;
@@ -655,7 +709,7 @@ FWORD_IMM2(semicolon, ";")
                  "Semicolon (;) can only be used used to terminate a colon definition");
 
     // Compile an exit word
-    forth_compile_word(f, &forth_do_exit_header);
+    forth_compile_word(f, &fword_do_exit_header);
 
     int start = forth_resolve(f, F_STATE_COLON);
     assert(f->colon_header);
@@ -684,17 +738,17 @@ void forth_process_input(F f, char *input, int len)
 
     while (forth_token(f)) {
         forth_header_t *w = forth_lookup_token(f);
-        if (!w) w = &forth_do_number_header;
+        if (!w) w = &fword_do_number_header;
         if (w->immediate)
             w->code(f, w);
         else
             forth_compile_word(f, w);
     }
 
-    forth_compile_word(f, &forth_do_exit_header);
+    forth_compile_word(f, &fword_do_exit_header);
 
     forth_header_t anon_input_word = { /* name */ "(input-buffer)",
-                                       /* code */ forth_do_colon,
+                                       /* code */ fword_do_colon,
                                        /* immediate */ 0,
                                        /* prev ptr */ NULL,
                                        /* n: var */{ 0 },
@@ -721,7 +775,7 @@ F forth_new(void)
     f->dictionary_head = last_ptr;
     f->sp = STACK_SIZE;
     f->rp = RSTACK_SIZE;
-    f->lp = LSTACK_SIZE;
+    f->lp = LOOP_STACK_SIZE;
     f->state_sp = STATE_STACK_SIZE;
 
     return f;

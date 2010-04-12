@@ -47,13 +47,18 @@ typedef struct forth_state_s {
     int		offset;
 } forth_state_t;
 
+typedef struct forth_loop_s {
+    int		index;
+    int		limit;
+} forth_loop_t;
+
 #define MAX_BREAK_POINTS		32
 #define MAX_INPUT_CODE_SZ		512
 #define MAX_INPUT_TOKEN_SZ		MAX_HEADER_NAME_SZ
 
 #define STACK_SIZE           64
 #define RSTACK_SIZE          64
-#define LSTACK_SIZE          16
+#define LOOP_STACK_SIZE      16
 #define STATE_STACK_SIZE     16
 
 struct forth_environment_s {
@@ -72,7 +77,7 @@ struct forth_environment_s {
 
     cell           stack[STACK_SIZE];
     forth_body_t *rstack[RSTACK_SIZE];
-    int           lstack[LSTACK_SIZE];
+    forth_loop_t  lstack[LOOP_STACK_SIZE];
     forth_state_t state_stack[STATE_STACK_SIZE];
 
     char *input;
@@ -188,7 +193,7 @@ void forth_process_input(F f, char *input, int len);
     FWORD_IMM2(_name, # _name)
 
 #define FWORD_DO2(_name, _str)                 \
-    FWORD_HEADER(forth_do_ ## _name, _str, 1)
+    FWORD_HEADER(fword_do_ ## _name, _str, 1)
 
 #define FWORD_DO(_name)                        \
     FWORD_DO2(_name, "(" # _name ")")
