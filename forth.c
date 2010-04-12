@@ -97,7 +97,7 @@ static void forth_stack_check(F f, int stack_num)
         name = "data";
         break;
 
-    case F_RETURN_STACK: // Data stack
+    case F_RETURN_STACK: // Return stack
         err_under = FERR_RETURN_STACK_UNDERRUN;
         err_over  = FERR_RETURN_STACK_OVERFLOW;
         sp = RP;
@@ -105,12 +105,20 @@ static void forth_stack_check(F f, int stack_num)
         name = "return";
         break;
 
-    case F_LOOP_STACK: // Data stack
+    case F_LOOP_STACK: // Loop stack
         err_under = FERR_LOOP_STACK_UNDERRUN;
         err_over  = FERR_LOOP_STACK_OVERFLOW;
         sp = LP;
         sz = LSTACK_SIZE;
         name = "loop";
+        break;
+        
+    case F_STATE_STACK: // State stack
+        err_under = FERR_STATE_STACK_UNDERRUN;
+        err_over  = FERR_STATE_STACK_OVERFLOW;
+        sp = f->state_sp;
+        sz = STATE_STACK_SIZE;
+        name = "state";
         break;
         
     default:
@@ -140,6 +148,21 @@ static void push(F f, cell v)    { forth_stack_check(f, F_DATA_STACK);  f->stack
 cell pop(F f)              { forth_stack_check(f, F_DATA_STACK);  return f->stack[SP++]; }
 
 scell spop(F f)   { return (scell) POP; }
+
+static void state_push(F f, int state)
+{
+    forth_stack_check(f, F_STATE_STACK);
+    f->state_stack[--(f->state_sp)] = f->state;
+    f->state = state;
+}
+
+static int state_pop(F f)
+{
+    forth_stack_check(f, F_STATE_STACK);
+    int state = f->state;
+    f->state = f->state_stack[(f->state_sp)++];
+    return state;
+}
 
 /*
  * DUP has a custom header because it is the first word in the dictionary
@@ -544,10 +567,11 @@ FWORD_DO(branch)
 
 FWORD_IMM2(colon, ":")
 {
-    // Verfiy we're not currently compiling.
-    forth_assert(f, !f->colon_header,
-                 FERR_COLON_IN_COLON,
-                 "Cannot use the colon word inside a colon definition");
+    // Verfiy we're not currently compiling or otherwise encumbered
+    forth_assert(f, !f->state,
+                 FERR_EMBEDDED_COLON,
+                 "Cannot use the colon word inside a colon, do, if, etc.");
+    assert(f->colon_header == NULL);
 
     // Switch the compiler on
     f->colon_offset_start = f->code_offset;
@@ -559,14 +583,18 @@ FWORD_IMM2(colon, ":")
     p->immediate = 0;
     p->prev = f->dictionary_head;
     f->colon_header = p;
+    state_push(f, F_STATE_COLON);
 }
 
 
 FWORD_IMM2(semicolon, ";")
 {
-    forth_assert(f, f->colon_header != NULL,
+    forth_assert(f, f->state == F_STATE_COLON,
                  FERR_SEMICOLON_WOUT_COLON,
                  "Semicolon (;) can only be used used to terminate a colon definition");
+    state_pop(f);
+    assert(f->colon_header);
+
     // Compile an exit word
     forth_compile_word(f, &forth_do_exit_header);
     // Malloc space for the freshly compiled word.
@@ -633,6 +661,7 @@ F forth_new(void)
     f->sp = STACK_SIZE;
     f->rp = RSTACK_SIZE;
     f->lp = LSTACK_SIZE;
+    f->state_sp = STATE_STACK_SIZE;
 
     return f;
 }

@@ -44,12 +44,12 @@ struct forth_header_s {
 
 #define MAX_BREAK_POINTS		32
 #define MAX_INPUT_CODE_SZ		512
-#define MAX_INPUT_LINE_SZ		2000
 #define MAX_INPUT_TOKEN_SZ		MAX_HEADER_NAME_SZ
 
-#define STACK_SIZE      4096
-#define RSTACK_SIZE     64
-#define LSTACK_SIZE     16
+#define STACK_SIZE           64
+#define RSTACK_SIZE          64
+#define LSTACK_SIZE          16
+#define STATE_STACK_SIZE     16
 
 struct forth_environment_s {
     forth_header_t *dictionary_head;
@@ -62,11 +62,13 @@ struct forth_environment_s {
     int sp;            /* parameter stack pointer */
     int rp;            /* return stack pointer */
     int lp;            /* loop stack pointer */
+    int state_sp;      /* state stack pointer */
     forth_body_t *ip;     /* instruction pointer */
 
-    cell         stack[STACK_SIZE];
+    cell           stack[STACK_SIZE];
     forth_body_t *rstack[RSTACK_SIZE];
-    int         lstack[LSTACK_SIZE];
+    int           lstack[LSTACK_SIZE];
+    int      state_stack[STATE_STACK_SIZE];
 
     char *input;
     int input_len;
@@ -83,6 +85,7 @@ struct forth_environment_s {
     /*
      * Compiler variables
      */
+    int state;  // Set bits according to state
     int code_offset;
     int colon_offset_start;
     forth_header_t *colon_header;
@@ -122,7 +125,18 @@ struct forth_environment_s {
 enum {
     F_DATA_STACK = 1,
     F_RETURN_STACK,
-    F_LOOP_STACK
+    F_LOOP_STACK,
+    F_STATE_STACK,
+};
+
+/*
+ * Forth states
+ */
+enum {
+    F_STATE_COLON = 1,
+    F_STATE_DO,
+    F_STATE_IF,
+    F_STATE_ELSE,
 };
 
 /*
@@ -138,8 +152,10 @@ enum {
     FERR_RETURN_STACK_OVERFLOW,
     FERR_LOOP_STACK_UNDERRUN,
     FERR_LOOP_STACK_OVERFLOW,
+    FERR_STATE_STACK_UNDERRUN,
+    FERR_STATE_STACK_OVERFLOW,
     FERR_INVALID_TOKEN,
-    FERR_COLON_IN_COLON,
+    FERR_EMBEDDED_COLON,
     FERR_SEMICOLON_WOUT_COLON,
 };
 
