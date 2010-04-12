@@ -51,7 +51,7 @@
 void ftest(void)
 {
     F f = forth_new();
-    char *input = "4 5 + . 10 emit 13 emit";
+    char *input = ": cr 10 emit 13 emit ; : star 42 emit ; 4 5 + . cr star star star cr";
     forth_process_input(f, input, strlen(input));
 }
 
@@ -317,6 +317,11 @@ void forth_compile_cons(F f, cell n)
     f->code[f->code_offset++].cons = n;
 }
 
+void forth_compile_offset(F f, int n)
+{
+    f->code[f->code_offset++].br_offset = n;
+}
+
 
 /*
  **********************************************************
@@ -422,11 +427,15 @@ static void forth_parse(F f, char delim) // delim --
     } while (1);
 }
 
-static void forth_token(F f)
+static int forth_token(F f)
 {
     int i;
 
     f->token_start = f->token_end = -1;
+
+    if (f->input_offset >= f->input_len) {
+        return 0;
+    }
 
     /*
      * Skip white space
@@ -449,6 +458,8 @@ static void forth_token(F f)
 
     i = f->token_start;
     int e = f->token_end;
+    if (e <= i) return 0;
+
     if (e - i >= MAX_INPUT_TOKEN_SZ) {
         e = i + MAX_INPUT_TOKEN_SZ -1;
     }
@@ -458,6 +469,8 @@ static void forth_token(F f)
         *p++ = f->input[i++];
     }
     *p = '\0';
+
+    return 1;
 }
 
 static forth_header_t *forth_lookup_token(F f)
@@ -524,12 +537,47 @@ FWORD_DO(exit)
 }
 
 
+FWORD_DO(branch)
+{
+    IP += IP -> br_offset;
+}
+
+FWORD_IMM2(colon, ":")
+{
+    // Verfiy we're not currently compiling.
+    forth_assert(f, !f->colon_header,
+                 FERR_COLON_IN_COLON,
+                 "Cannot use the colon word inside a colon definition");
+
+    // Switch the compiler on
+    f->colon_offset_start = f->code_offset;
+    forth_assert(f, forth_token(f), FERR_NEED_MORE_INPUT, "");
+    forth_header_t *p = calloc(1, sizeof(forth_header_t));
+    bcopy(f->token_string, &p->name[0], MAX_HEADER_NAME_SZ);
+    p->name[MAX_HEADER_NAME_SZ-1] = '\0'; // Just in case
+    p->code = forth_do_colon;
+    p->immediate = 0;
+    p->prev = f->dictionary_head;
+    f->colon_header = p;
+}
+
+
 FWORD_IMM2(semicolon, ";")
 {
+    forth_assert(f, f->colon_header != NULL,
+                 FERR_SEMICOLON_WOUT_COLON,
+                 "Semicolon (;) can only be used used to terminate a colon definition");
     // Compile an exit word
     forth_compile_word(f, &forth_do_exit_header);
     // Malloc space for the freshly compiled word.
-    
+    int code_len = f->code_offset - f->colon_offset_start;
+    forth_body_t *body = calloc(code_len, sizeof(forth_body_t));
+    bcopy(&f->code[f->colon_offset_start],
+          body, code_len * sizeof(forth_body_t));
+    f->colon_header->p.body = body;
+    f->dictionary_head = f->colon_header;
+    f->colon_header = NULL;
+    f->code_offset = f->colon_offset_start;
 }
 
 
@@ -542,12 +590,10 @@ void forth_process_input(F f, char *input, int len)
     f->input_line_cnt = 1;
     f->input_line_begin_offset = 0;
 
-    f->in_colon = 0;
     f->code_offset = 0;
+    f->colon_header = NULL;
 
-    while (f->input_offset < f->input_len) {
-        forth_token(f);
-        if (f->token_start == -1) break;
+    while (forth_token(f)) {
         forth_header_t *w = forth_lookup_token(f);
         if (!w) w = &forth_do_number_header;
         if (w->immediate)

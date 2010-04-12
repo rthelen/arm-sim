@@ -83,10 +83,10 @@ struct forth_environment_s {
     /*
      * Compiler variables
      */
-    int in_colon, colon_offset_start;
+    int code_offset;
+    int colon_offset_start;
     forth_header_t *colon_header;
     forth_body_t code[MAX_INPUT_CODE_SZ];
-    int code_offset;
 };
 
 #define SP		(f->sp)
@@ -130,7 +130,8 @@ enum {
  */
 
 enum {
-    F_NOERR,
+    FERR_NEED_MORE_INPUT = -1,
+    F_NOERR = 0,
     FERR_STACK_UNDERRUN,
     FERR_STACK_OVERFLOW,
     FERR_RETURN_STACK_UNDERRUN,
@@ -138,6 +139,8 @@ enum {
     FERR_LOOP_STACK_UNDERRUN,
     FERR_LOOP_STACK_OVERFLOW,
     FERR_INVALID_TOKEN,
+    FERR_COLON_IN_COLON,
+    FERR_SEMICOLON_WOUT_COLON,
 };
 
 F forth_new(void);
