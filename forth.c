@@ -146,15 +146,14 @@ scell spop(F f)   { return (scell) POP; }
  * and points to NULL.
  */
 
-FORTH_FUNCTION(fword_dup, "dup", 0, NULL)
-                          { cell a = POP; PUSH(a); PUSH(a); }
-FWORD(drop, dup)          { POP; }
-FWORD(swap, drop)         { cell a = POP; cell b = POP; PUSH(a); PUSH(b); }
-FWORD(nip, swap)          { SWAP; DROP; }
-FWORD(2drop, nip)         { POP; POP; }
+FWORD(dup)      { cell a = POP; PUSH(a); PUSH(a); }
+FWORD(drop)     { POP; }
+FWORD(swap)     { cell a = POP; cell b = POP; PUSH(a); PUSH(b); }
+FWORD(nip)      { SWAP; DROP; }
+FWORD(2drop)    { POP; POP; }
 
             /* over:  a b -> a b a */
-FWORD(over, 2drop)        { cell b = POP; cell a = POP; PUSH(a); PUSH(b); PUSH(a); }
+FWORD(over)         { cell b = POP; cell a = POP; PUSH(a); PUSH(b); PUSH(a); }
 
 /**********************************************************
  *
@@ -162,40 +161,40 @@ FWORD(over, 2drop)        { cell b = POP; cell a = POP; PUSH(a); PUSH(b); PUSH(a
  *
  **********************************************************/
 
-FWORD3(plus, "+", 2drop)    { PUSH(SPOP + SPOP); }
-FWORD3(sub, "-", plus)      { PUSH(-SPOP + SPOP); }
-FWORD3(star, "*", sub)      { PUSH(SPOP * SPOP); }
-FWORD3(slash, "/", star)    { SWAP; PUSH(SPOP / SPOP); }
-FWORD3(and, "and", slash)   { PUSH(POP & POP); }
-FWORD3(or, "or", and)       { PUSH(POP | POP); }
-FWORD3(xor, "xor", or)      { PUSH(POP ^ POP); }
+FWORD2(plus, "+")    { PUSH(SPOP + SPOP); }
+FWORD2(sub, "-")     { PUSH(-SPOP + SPOP); }
+FWORD2(star, "*")    { PUSH(SPOP * SPOP); }
+FWORD2(slash, "/")   { SWAP; PUSH(SPOP / SPOP); }
+FWORD2(and, "and")   { PUSH(POP & POP); }
+FWORD2(or, "or")     { PUSH(POP | POP); }
+FWORD2(xor, "xor")   { PUSH(POP ^ POP); }
 
-FWORD3(negate, "negate", xor)      { PUSH(-SPOP); }
-FWORD3(invert, "invert", negate)   { PUSH(~SPOP); }
+FWORD2(negate, "negate")   { PUSH(-SPOP); }
+FWORD2(invert, "invert")   { PUSH(~SPOP); }
 
-FWORD3(2star, "2*", negate)        { PUSH(SPOP << 1); }
-FWORD3(2slash, "2/", 2star)        { PUSH(SPOP >> 1); }
-FWORD3(u2slash, "u2/", 2slash)     { PUSH(POP >> 1); }
+FWORD2(2star, "2*")        { PUSH(SPOP << 1); }
+FWORD2(2slash, "2/")       { PUSH(SPOP >> 1); }
+FWORD2(u2slash, "u2/")     { PUSH(POP >> 1); }
 
-FWORD3(shift_left, "<<", u2slash)
+FWORD2(shift_left, "<<")
 { cell cnt = POP,       n =  POP; PUSH(n << cnt); }
 
-FWORD3(shift_right, ">>", shift_left)
+FWORD2(shift_right, ">>")
 { cell cnt = POP; scell n = SPOP; PUSH(n >> cnt); }
 
-FWORD3(ushift_right, "u>>", shift_right)
+FWORD2(ushift_right, "u>>")
 { cell cnt = POP; cell  n =  POP; PUSH(n >> cnt); }
 
-FWORD3(uless, "u<", ushift_right)
+FWORD2(uless, "u<")
 {  cell b =  POP;  cell a =  POP; PUSH(a < b ? -1 : 0); }
 
-FWORD3(less, "<", uless)
+FWORD2(less, "<")
 { scell b = SPOP; scell a = SPOP; PUSH(a < b ? -1 : 0); }
 
-FWORD3(zero_less, "0<", less)
+FWORD2(zero_less, "0<")
 { PUSH(SPOP <  0 ? -1 : 0); }
 
-FWORD3(zero_equal, "=", zero_less)
+FWORD2(zero_equal, "=")
 { PUSH( POP == 0 ? -1 : 0); }
 
 /*
@@ -206,7 +205,7 @@ FWORD3(zero_equal, "=", zero_less)
  **********************************************************
  **/
 
-FWORD3(uslash_mod, "u/mod", zero_equal)  /* u1 u2 -- um uq */
+FWORD2(uslash_mod, "u/mod")  /* u1 u2 -- um uq */
 {
     cell top = POP;
     cell st1 = POP;
@@ -241,7 +240,7 @@ FWORD3(uslash_mod, "u/mod", zero_equal)  /* u1 u2 -- um uq */
  * and q,r are the symmetric quotient and remainder.
  *
  */
-FWORD3(slash_mod, "/mod", uslash_mod)  /* n1 n2 -- m q */
+FWORD2(slash_mod, "/mod")  /* n1 n2 -- m q */
 {
     scell top = POP;
     scell st1 = POP;
@@ -274,12 +273,12 @@ FWORD3(slash_mod, "/mod", uslash_mod)  /* n1 n2 -- m q */
  **********************************************************
  **/
 
-FWORD3(fetch, "@", slash_mod)  { PUSH(mem_load(POP, 0)); }
-FWORD3(cfetch, "c@", fetch)    { PUSH(mem_loadb(POP, 0)); }
+FWORD2(fetch, "@")    { PUSH(mem_load(POP, 0)); }
+FWORD2(cfetch, "c@")  { PUSH(mem_loadb(POP, 0)); }
 
-FWORD3(store, "!", cfetch)        { cell addr = POP, v = POP; mem_store(addr, 0, v); }
-FWORD3(cstore, "c!", store)       { cell addr = POP, v = POP; mem_storeb(addr, 0, v); }
-FWORD3(plus_store, "+!", cstore)  { cell addr = POP, v = POP; mem_store(mem_load(addr, 0), 0, v); }
+FWORD2(store, "!")        { cell addr = POP, v = POP; mem_store(addr, 0, v); }
+FWORD2(cstore, "c!")      { cell addr = POP, v = POP; mem_storeb(addr, 0, v); }
+FWORD2(plus_store, "+!")  { cell addr = POP, v = POP; mem_store(mem_load(addr, 0), 0, v); }
 
 
 /*
@@ -290,8 +289,8 @@ FWORD3(plus_store, "+!", cstore)  { cell addr = POP, v = POP; mem_store(mem_load
  **********************************************************
  **/
 
-FWORD3(dot, ".", plus_store)      { printf("%x ", POP); }
-FWORD(emit, dot)                  { printf("%c", POP); }
+FWORD2(dot, ".")      { printf("%x ", POP); }
+FWORD(emit)           { printf("%c", POP); }
 
 
 /*
@@ -327,11 +326,11 @@ void forth_compile_cons(F f, cell n)
  **********************************************************
  **/
 
-FORTH_FUNCTION(forth_do_var, "(var)", 0, NULL)  { PUSH(w->n.var); }
-FORTH_DO(cons, var)                    { PUSH(w->n.cons); }
-FORTH_DO(lit, cons)                    { PUSH(IP++ -> cons); }
+FWORD_DO(var)   { PUSH(w->n.var); }
+FWORD_DO(cons)  { PUSH(w->n.cons); }
+FWORD_DO(lit)   { PUSH(IP++ -> cons); }
 
-FORTH_FUNCTION(forth_imm_number, "number_imm", 1, NULL)
+FWORD_DO(number)
 {
     cell n;
     
@@ -376,10 +375,10 @@ static cell *forth_get_array_address(F f)
     return &v->p.array[idx];
 }
 
-FORTH_DO(set, lit)  {       *forth_get_var_address(f) = POP; }
-FORTH_DO(get, set)  {  PUSH(*forth_get_var_address(f)); }
-FORTH_DO(seti, get) {       *forth_get_array_address(f) = POP; }
-FORTH_DO(geti, seti) {  PUSH(*forth_get_array_address(f)); }
+FWORD_DO(set)  {       *forth_get_var_address(f) = POP; }
+FWORD_DO(get)  {  PUSH(*forth_get_var_address(f)); }
+FWORD_DO(seti) {       *forth_get_array_address(f) = POP; }
+FWORD_DO(geti) {  PUSH(*forth_get_array_address(f)); }
 
 static int forth_get_input_char(F f)
 {
@@ -506,7 +505,7 @@ static int forth_number_token(F f, cell *n)
  * finally returns to its value on entry.
  */
 
-FORTH_DO(colon, geti)
+FWORD_DO(colon)
 {
     int rp_saved = RP;
 
@@ -519,13 +518,13 @@ FORTH_DO(colon, geti)
 }
 
 
-FORTH_DO(exit, colon)
+FWORD_DO(exit)
 {
     UNNEST;
 }
 
 
-FORTH_IMM3(semicolon, ";", number)
+FWORD_IMM2(semicolon, ";")
 {
     // Compile an exit word
     forth_compile_word(f, &forth_do_exit_header);
@@ -550,7 +549,7 @@ void forth_process_input(F f, char *input, int len)
         forth_token(f);
         if (f->token_start == -1) break;
         forth_header_t *w = forth_lookup_token(f);
-        if (!w) w = &forth_imm_number_header;
+        if (!w) w = &forth_do_number_header;
         if (w->immediate)
             w->code(f, w);
         else
@@ -568,11 +567,23 @@ void forth_process_input(F f, char *input, int len)
     CALL(&anon_input_word);
 }
 
+forth_header_t *dictionary_ptrs[] = {
+#include "fwords.inc"
+    NULL
+};
+
 F forth_new(void)
 {
     F f = calloc(1, sizeof(*f));
 
-    f->dictionary_head = &fword_emit_header;
+    forth_header_t *last_ptr = NULL;
+    for (int i = 0; dictionary_ptrs[i]; i++) {
+        dictionary_ptrs[i]->prev = last_ptr;
+        last_ptr = dictionary_ptrs[i];
+    }
+    assert(last_ptr != NULL);
+
+    f->dictionary_head = last_ptr;
     f->sp = STACK_SIZE;
     f->rp = RSTACK_SIZE;
     f->lp = LSTACK_SIZE;

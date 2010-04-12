@@ -8,6 +8,7 @@
 SRC  = sim.c memory.c io.c file.c warn.c dtc.c decode.c disassemble.c execute.c arm.c undo.c forth.c
 OBJS = $(patsubst %.c, objects/%.o, ${SRC})
 INCL = sim.h arm.h
+AUTOS = fwords.inc
 
 CFLAGS = -Wall -Werror -std=c99
 
@@ -17,8 +18,13 @@ else
 	CFLAGS += -O2
 endif
 
-sim: ${OBJS} ${INCL}
+sim: clean ${OBJS} ${INCL}
 	cc ${OBJS} -o $@
+
+objects/forth.o: fwords.inc
+
+fwords.inc: forth.c forth.h gen_fword_inc.pl
+	./gen_fword_inc.pl < $< > $@
 
 .PHONY: objects
 objects:

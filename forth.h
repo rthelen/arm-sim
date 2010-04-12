@@ -81,7 +81,7 @@ struct forth_environment_s {
     int token_line_num, token_char_cnt;
 
     /*
-     * Compiling variables
+     * Compiler variables
      */
     int in_colon, colon_offset_start;
     forth_header_t *colon_header;
@@ -144,25 +144,26 @@ F forth_new(void);
 void forth_process_input(F f, char *input, int len);
 
 
-#define FORTH_FUNCTION(_name, _str, _imm, _prev)                     \
-    void _name(F f, forth_header_t *w);                              \
-    forth_header_t _name ## _header = { _str, _name, _imm, _prev };  \
+#define FWORD_HEADER(_name, _str, _imm)                       \
+    void _name(F f, forth_header_t *w);                       \
+    forth_header_t _name ## _header = { _str, _name, _imm };  \
     void _name(F f, forth_header_t *w)
 
-#define FWORD3(_name, _str, _prev)                    \
-    FORTH_FUNCTION(fword_ ## _name, _str, 0, &fword_ ## _prev ## _header)
+#define FWORD2(_name, _str)                    \
+    FWORD_HEADER(fword_ ## _name, _str, 0)
 
-#define FWORD(_name, _prev)                           \
-    FWORD3(_name, # _name, _prev)
+#define FWORD(_name)                           \
+    FWORD2(_name, # _name)
 
-#define FORTH_DO3(_name, _str, _prev)                 \
-    FORTH_FUNCTION(forth_do_ ## _name, _str, 0, &forth_do_ ## _prev ## _header)
+#define FWORD_IMM2(_name, _str)                \
+    FWORD_HEADER(fword_ ## _name, _str, 1)
 
-#define FORTH_DO(_name, _prev)                        \
-    FORTH_DO3(_name, "(" # _name ")", _prev)
+#define FWORD_IMM(_name)                       \
+    FWORD_IMM2(_name, # _name)
 
-#define FORTH_IMM3(_name, _str, _prev)                \
-    FORTH_FUNCTION(forth_imm_ ## _name, _str, 1, &forth_imm_ ## _prev ## _header)
+#define FWORD_DO2(_name, _str)                 \
+    FWORD_HEADER(forth_do_ ## _name, _str, 1)
 
-#define FORTH_IMM(_name, _prev)                       \
-    FORTH_IMM3(_name, # _name "_imm", _prev)
+#define FWORD_DO(_name)                        \
+    FWORD_DO2(_name, "(" # _name ")")
+
