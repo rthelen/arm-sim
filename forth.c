@@ -51,7 +51,11 @@
 void ftest(void)
 {
     F f = forth_new();
-    char *input = ": cr 10 emit 13 emit ; : star 42 emit ; 4 5 + . cr star star star cr";
+    char *input = ": cr 10 emit 13 emit ; "
+                  " : star 42 emit ; "
+                  " : .n dup if . else drop star then ; "
+                  "4 5 + .n cr "
+                  "5 5 - .n cr ";
     forth_process_input(f, input, strlen(input));
 }
 
@@ -149,19 +153,26 @@ cell pop(F f)              { forth_stack_check(f, F_DATA_STACK);  return f->stac
 
 scell spop(F f)   { return (scell) POP; }
 
-static void state_push(F f, int state)
+static void state_push(F f, forth_state_t state)
 {
     forth_stack_check(f, F_STATE_STACK);
-    f->state_stack[--(f->state_sp)] = f->state;
-    f->state = state;
+    f->state_stack[--(f->state_sp)] = state;
 }
 
-static int state_pop(F f)
+static forth_state_t state_pop(F f)
 {
     forth_stack_check(f, F_STATE_STACK);
-    int state = f->state;
-    f->state = f->state_stack[(f->state_sp)++];
+    forth_state_t state = f->state_stack[(f->state_sp)++];
     return state;
+}
+
+static int forth_state(F f)
+{
+    if (f->state_sp == STATE_STACK_SIZE) {
+        return 0;
+    }
+
+    return f->state_stack[f->state_sp].state;
 }
 
 /*
@@ -562,19 +573,70 @@ FWORD_DO(exit)
 
 FWORD_DO(branch)
 {
-    IP += IP -> br_offset;
+    int offset = (IP ++) -> br_offset;
+    IP += offset;
 }
+
+FWORD_DO(zbranch)
+{
+    if (POP == 0) {
+        forth_do_branch(f, w);
+    } else {
+        IP ++;  // Skip branch offset
+    }
+}
+
+static void forth_mark(F f, forth_header_t *branch_word, int state_type)
+{
+    forth_compile_word(f, branch_word);
+    forth_compile_offset(f, 0); // Unknown at this time
+    forth_state_t mark = { state_type, f->code_offset };
+    state_push(f, mark);
+}
+
+static int forth_resolve(F f, int state_type)
+{
+    forth_assert(f, forth_state(f) == state_type,
+                 FERR_MISMATCHED_CONTROL,
+                 "Control words must be matched properly: if [else] then, do loop, : ; etc.");
+    forth_state_t mark = state_pop(f);
+    assert(mark.state == state_type);  // Logic error in this code if not
+    f->code[mark.offset -1].br_offset = f->code_offset - mark.offset;
+    return mark.offset;
+}
+
+FWORD_IMM(if)
+{
+    forth_mark(f, &forth_do_zbranch_header, F_STATE_IF);
+}
+
+FWORD_IMM(else)
+{
+    forth_assert(f, forth_state(f) == F_STATE_IF,
+                 FERR_MISMATCHED_CONTROL,
+                 "else must follow an if");
+    forth_state_t if_mark = state_pop(f);
+    forth_mark(f, &forth_do_branch_header, F_STATE_IF);
+    state_push(f, if_mark);
+    forth_resolve(f, F_STATE_IF);
+}
+
+FWORD_IMM(then)
+{
+    forth_resolve(f, F_STATE_IF);
+}
+    
 
 FWORD_IMM2(colon, ":")
 {
     // Verfiy we're not currently compiling or otherwise encumbered
-    forth_assert(f, !f->state,
+    forth_assert(f, !forth_state(f),
                  FERR_EMBEDDED_COLON,
                  "Cannot use the colon word inside a colon, do, if, etc.");
     assert(f->colon_header == NULL);
 
     // Switch the compiler on
-    f->colon_offset_start = f->code_offset;
+    forth_mark(f, &forth_do_branch_header, F_STATE_COLON);
     forth_assert(f, forth_token(f), FERR_NEED_MORE_INPUT, "");
     forth_header_t *p = calloc(1, sizeof(forth_header_t));
     bcopy(f->token_string, &p->name[0], MAX_HEADER_NAME_SZ);
@@ -583,29 +645,28 @@ FWORD_IMM2(colon, ":")
     p->immediate = 0;
     p->prev = f->dictionary_head;
     f->colon_header = p;
-    state_push(f, F_STATE_COLON);
 }
 
 
 FWORD_IMM2(semicolon, ";")
 {
-    forth_assert(f, f->state == F_STATE_COLON,
+    forth_assert(f, forth_state(f) == F_STATE_COLON,
                  FERR_SEMICOLON_WOUT_COLON,
                  "Semicolon (;) can only be used used to terminate a colon definition");
-    state_pop(f);
-    assert(f->colon_header);
 
     // Compile an exit word
     forth_compile_word(f, &forth_do_exit_header);
+
+    int start = forth_resolve(f, F_STATE_COLON);
+    assert(f->colon_header);
+
     // Malloc space for the freshly compiled word.
-    int code_len = f->code_offset - f->colon_offset_start;
+    int code_len = f->code_offset - start;
     forth_body_t *body = calloc(code_len, sizeof(forth_body_t));
-    bcopy(&f->code[f->colon_offset_start],
-          body, code_len * sizeof(forth_body_t));
+    bcopy(&f->code[start], body, code_len * sizeof(forth_body_t));
     f->colon_header->p.body = body;
     f->dictionary_head = f->colon_header;
     f->colon_header = NULL;
-    f->code_offset = f->colon_offset_start;
 }
 
 

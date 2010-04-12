@@ -42,6 +42,11 @@ struct forth_header_s {
     } p;
 };
 
+typedef struct forth_state_s {
+    int		state;
+    int		offset;
+} forth_state_t;
+
 #define MAX_BREAK_POINTS		32
 #define MAX_INPUT_CODE_SZ		512
 #define MAX_INPUT_TOKEN_SZ		MAX_HEADER_NAME_SZ
@@ -68,7 +73,7 @@ struct forth_environment_s {
     cell           stack[STACK_SIZE];
     forth_body_t *rstack[RSTACK_SIZE];
     int           lstack[LSTACK_SIZE];
-    int      state_stack[STATE_STACK_SIZE];
+    forth_state_t state_stack[STATE_STACK_SIZE];
 
     char *input;
     int input_len;
@@ -83,13 +88,15 @@ struct forth_environment_s {
     int token_line_num, token_char_cnt;
 
     /*
+     * Code generation
+     */
+    int code_offset;
+    forth_body_t code[MAX_INPUT_CODE_SZ];
+
+    /*
      * Compiler variables
      */
-    int state;  // Set bits according to state
-    int code_offset;
-    int colon_offset_start;
     forth_header_t *colon_header;
-    forth_body_t code[MAX_INPUT_CODE_SZ];
 };
 
 #define SP		(f->sp)
@@ -136,7 +143,6 @@ enum {
     F_STATE_COLON = 1,
     F_STATE_DO,
     F_STATE_IF,
-    F_STATE_ELSE,
 };
 
 /*
@@ -157,6 +163,7 @@ enum {
     FERR_INVALID_TOKEN,
     FERR_EMBEDDED_COLON,
     FERR_SEMICOLON_WOUT_COLON,
+    FERR_MISMATCHED_CONTROL,
 };
 
 F forth_new(void);
