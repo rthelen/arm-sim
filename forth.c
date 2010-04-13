@@ -53,14 +53,26 @@ void ftest(void)
     F f = forth_new();
     char *input =
         ": cr 10 emit 13 emit ; "
+        ".\" Printing 1 - 4\" cr "
         "5 1 do i . loop cr "
-        ": star 42 emit ; "
-        "10 1 do i 0 do star loop cr loop "
-        ": .n dup if . else drop star then ; "
-        "4 5 + .n cr "
-        "5 5 - .n cr ";
+        ".\" Printing a 9x9 pyramid of stars\" cr "
+        ": star \" *\" type ; "
+        ": spaces dup 0 > if 0 do 32 emit loop else drop then ; "
+        ": stars  dup 0 > if 0 do   star  loop else drop then ; "
+        "10 0 do 9 i - spaces i 2* 1 + stars cr loop "
+        "3 0 do 9 spaces star cr loop "
+        ;
     forth_process_input(f, input, strlen(input));
 }
+
+/**********************************************************
+ *
+ * Some forward references
+ *
+ **********************************************************/
+
+static int forth_token(F f);
+static int forth_parse(F f, char delim);
 
 /**********************************************************
  *
@@ -128,6 +140,14 @@ static void forth_stack_check(F f, int stack_num)
         name = "state";
         break;
         
+    case F_STRING_STACK: // State stack
+        err_under = FERR_STRING_STACK_UNDERRUN;
+        err_over  = FERR_STRING_STACK_OVERFLOW;
+        sp = f->string_sp;
+        sz = STRING_STACK_SIZE;
+        name = "string";
+        break;
+        
     default:
         fprintf(stderr, "INVALID stack number used in forth_stack_check(%d)\n", stack_num);
         exit(-1);
@@ -177,10 +197,29 @@ static int forth_state(F f)
     return f->state_stack[f->state_sp].state;
 }
 
-/*
- * DUP has a custom header because it is the first word in the dictionary
- * and points to NULL.
- */
+static void string_push(F f, forth_string_t str)
+{
+    forth_stack_check(f, F_STRING_STACK);
+    f->string_stack[--(f->string_sp)] = str;
+}
+
+static forth_string_t string_pop(F f)
+{
+    forth_stack_check(f, F_STRING_STACK);
+    return f->string_stack[(f->string_sp)++];
+}
+
+static void string_free(F f, forth_string_t str)
+{
+    free(str.buf);
+}
+    
+
+/**********************************************************
+ *
+ * The Most Rudimentary Stack Operators
+ *
+ **********************************************************/
 
 FWORD(dup)      { cell a = POP; PUSH(a); PUSH(a); }
 FWORD(drop)     { POP; }
@@ -198,9 +237,9 @@ FWORD(over)         { cell b = POP; cell a = POP; PUSH(a); PUSH(b); PUSH(a); }
  **********************************************************/
 
 FWORD2(plus, "+")    { PUSH(SPOP + SPOP); }
-FWORD2(sub, "-")     { PUSH(-SPOP + SPOP); }
+FWORD2(sub, "-")     { scell b = SPOP; scell a = SPOP; PUSH(a - b); }
 FWORD2(star, "*")    { PUSH(SPOP * SPOP); }
-FWORD2(slash, "/")   { SWAP; PUSH(SPOP / SPOP); }
+FWORD2(slash, "/")   { scell b = SPOP; scell a = SPOP; PUSH(a / b); }
 FWORD2(and, "and")   { PUSH(POP & POP); }
 FWORD2(or, "or")     { PUSH(POP | POP); }
 FWORD2(xor, "xor")   { PUSH(POP ^ POP); }
@@ -226,6 +265,9 @@ FWORD2(uless, "u<")
 
 FWORD2(less, "<")
 { scell b = SPOP; scell a = SPOP; PUSH(a < b ? -1 : 0); }
+
+FWORD2(greater, ">")
+{ scell b = SPOP; scell a = SPOP; PUSH(a > b ? -1 : 0); }
 
 FWORD2(zero_less, "0<")
 { PUSH(SPOP <  0 ? -1 : 0); }
@@ -327,12 +369,14 @@ FWORD2(plus_store, "+!")  { cell addr = POP, v = POP; mem_store(mem_load(addr, 0
 
 FWORD2(dot, ".")      { printf("%x ", POP); fflush(stdout); }
 FWORD(emit)           { printf("%c", POP); }
-
-
-/*
- * Declare static words
- */
-static int forth_number_token(F f, cell *n);
+FWORD(type)
+{
+    forth_string_t str = string_pop(f);
+    for (int i = 0; i < str.len; i++) {
+        printf("%c", str.buf[i]);
+    }
+    string_free(f, str);
+}
 
 
 /*
@@ -355,7 +399,7 @@ void forth_compile_cons(F f, cell n)
 
 void forth_compile_offset(F f, int n)
 {
-    f->code[f->code_offset++].br_offset = n;
+    f->code[f->code_offset++].n = n;
 }
 
 
@@ -370,29 +414,6 @@ void forth_compile_offset(F f, int n)
 FWORD_DO(var)   { PUSH(w->n.var); }
 FWORD_DO(cons)  { PUSH(w->n.cons); }
 FWORD_DO(lit)   { PUSH(IP++ -> cons); }
-
-FWORD_DO(number)
-{
-    cell n;
-    
-    int is_number = forth_number_token(f, &n);
-
-    /*
-     * This is a last chance word.  If it's not a number, then
-     * break out.
-     */
-
-    forth_assert(f, is_number, FERR_INVALID_TOKEN,
-                 "Word %s wasn't found in the dictionary "
-                 "and doesn't look like a number", f->token_string);
-
-    /*
-     * Else, put code into the stream to push the number at run time
-     */
-
-    forth_compile_word(f, &fword_do_lit_header);
-    forth_compile_cons(f, n);
-}
 
 static cell *forth_get_var_address(F f)
 {
@@ -421,161 +442,15 @@ FWORD_DO(get)  {  PUSH(*forth_get_var_address(f)); }
 FWORD_DO(seti) {       *forth_get_array_address(f) = POP; }
 FWORD_DO(geti) {  PUSH(*forth_get_array_address(f)); }
 
-static int forth_get_input_char(F f)
-{
-    static char last_c;
-    char c;
-
-    // Line numbers aren't bumped until we're actually reading
-    // the character -after- a new line.
-    if (last_c == '\n') {
-        f->input_line_cnt ++;
-        f->input_line_begin_offset = f->input_offset;
-    }
-
-    if (f->input_offset >= f->input_len) return EOF;
-    last_c = c = f->input[f->input_offset++];
-
-    return c;
-}
-
-static void forth_parse_end(F f, int cons_char)
-{
-    if (cons_char) {
-        f->token_end = f->input_offset -1;
-    } else {
-        f->token_end = f->input_offset;
-    }
-}
-
-static void forth_parse(F f, char delim) // delim --
-{
-    f->token_start = f->input_offset;
-
-    do {
-        int c = forth_get_input_char(f);
-        if (c == EOF)
-            return forth_parse_end(f, 0);
-        if (delim == ' ' && isspace(c))
-            return forth_parse_end(f, 1);
-        else if (delim == c)
-            return forth_parse_end(f, 1);
-    } while (1);
-}
-
-static int forth_token(F f)
-{
-    int i;
-
-    f->token_start = f->token_end = -1;
-
-    if (f->input_offset >= f->input_len) {
-        return 0;
-    }
-
-    /*
-     * Skip white space
-     */
-
-    i = f->input_offset;
-    while (i < f->input_len && isspace(f->input[i])) {
-        if (f->input[i++] == '\n') {
-            f->input_line_cnt ++;
-            f->input_line_begin_offset = i;
-        }
-    }
-    f->input_offset = i;
-
-    /*
-     * Grab a token
-     */
-
-    forth_parse(f, ' ');
-
-    i = f->token_start;
-    int e = f->token_end;
-    if (e <= i) return 0;
-
-    if (e - i >= MAX_INPUT_TOKEN_SZ) {
-        e = i + MAX_INPUT_TOKEN_SZ -1;
-    }
-
-    char *p = f->token_string;
-    while (i < e) {
-        *p++ = f->input[i++];
-    }
-    *p = '\0';
-
-    return 1;
-}
-
-static forth_header_t *forth_lookup_token(F f)
-{
-    forth_header_t *p = f->dictionary_head;
-
-    while (p) {
-        if (strcmp(f->token_string, p->name) == 0) {
-            return p;
-        }
-        p = p->prev;
-    }
-
-    return NULL;
-}
-
-static int forth_number_token(F f, cell *n)
-{
-    int i;
-    char *p;
-
-    if (strlen(f->token_string) == 8) {
-        for (i = 0; i < 8; i++) {
-            if (!isxdigit(f->token_string[i]))
-                break;
-        }
-
-        if (i == 8) {
-            // Assume it's a hex humber
-            *n = strtoll(f->token_string, NULL, 16);
-            return 1;
-        }
-    }
-
-    *n = strtoll(f->token_string, &p, 0);
-    if (*p == '\0') return 1;
-    else            return 0;
-}
-
-
-/*
- * colon()
+/**********************************************************
  *
- * Continue executing words until an exit pops an IP and the RP
- * finally returns to its value on entry.
- */
-
-FWORD_DO(colon)
-{
-    int rp_saved = RP;
-
-    NEST;
-    IP = w->p.body;
-    do {
-        forth_header_t *w = IP++ -> word;
-        CALL(w);
-    } while (RP < rp_saved);
-}
-
-
-FWORD_DO(exit)
-{
-    UNNEST;
-}
-
+ * Branch Words
+ *
+ **********************************************************/
 
 FWORD_DO(branch)
 {
-    int offset = (IP ++) -> br_offset;
+    int offset = (IP ++) -> n;
     IP += offset;
 }
 
@@ -587,6 +462,12 @@ FWORD_DO(zbranch)
         IP ++;  // Skip branch offset
     }
 }
+
+/**********************************************************
+ *
+ * Control Words
+ *
+ **********************************************************/
 
 static void forth_mark(F f, forth_header_t *branch_word, int state_type)
 {
@@ -606,7 +487,7 @@ static int forth_resolve(F f, int state_type)
                  "Control words must be matched properly: if [else] then, do loop, : ; etc.");
     forth_state_t mark = state_pop(f);
     assert(mark.state == state_type);  // Logic error in this code if not
-    f->code[mark.offset -1].br_offset = f->code_offset - mark.offset;
+    f->code[mark.offset -1].n = f->code_offset - mark.offset;
     return mark.offset;
 }
 
@@ -681,6 +562,38 @@ FWORD_IMM(loop)
 }
     
 
+/**********************************************************
+ *
+ * Defining Words (e.g., : ;)
+ *
+ **********************************************************/
+
+/*
+ * colon()
+ *
+ * Continue executing words until an exit pops an IP and the RP
+ * finally returns to its value on entry.
+ */
+
+FWORD_DO(colon)
+{
+    int rp_saved = RP;
+
+    NEST;
+    IP = w->p.body;
+    do {
+        forth_header_t *w = IP++ -> word;
+        CALL(w);
+    } while (RP < rp_saved);
+}
+
+
+FWORD_DO(exit)
+{
+    UNNEST;
+}
+
+
 FWORD_IMM2(colon, ":")
 {
     // Verfiy we're not currently compiling or otherwise encumbered
@@ -691,13 +604,22 @@ FWORD_IMM2(colon, ":")
 
     // Switch the compiler on
     forth_mark(f, &fword_do_branch_header, F_STATE_COLON);
-    forth_assert(f, forth_token(f), FERR_NEED_MORE_INPUT, "");
+
+    // Fetch the next token, i.e., the name of the new word
+    int token_found = forth_token(f);
+    forth_assert(f, token_found, FERR_NEED_MORE_INPUT, "");
+
+    // Allocate memory for the header
     forth_header_t *p = calloc(1, sizeof(forth_header_t));
+
+    // Populate the header
     bcopy(f->token_string, &p->name[0], MAX_HEADER_NAME_SZ);
     p->name[MAX_HEADER_NAME_SZ-1] = '\0'; // Just in case
     p->code = fword_do_colon;
     p->immediate = 0;
     p->prev = f->dictionary_head;
+
+    // Note the header in the forth environment
     f->colon_header = p;
 }
 
@@ -723,6 +645,219 @@ FWORD_IMM2(semicolon, ";")
     f->colon_header = NULL;
 }
 
+
+/**********************************************************
+ *
+ * String Operators
+ *
+ **********************************************************/
+
+FWORD_DO(quote)
+{
+    int len = IP++ -> n;
+
+    char *buf = malloc(len + 1);
+    forth_body_t *quote_buf = f->ip - 2 - len;
+    for (int i = 0; i < len; i++) {
+        buf[i] = quote_buf[i].c;
+    }
+    buf[len] = '\0';
+
+    forth_string_t str = {len, buf};
+    string_push(f, str);
+}
+
+FWORD_IMM2(quote, "\"")
+{
+    int term_qoute_found = forth_parse(f, '\"');
+
+    forth_assert(f, term_qoute_found,
+                 FERR_NEED_MORE_INPUT, "");
+
+    forth_mark(f, &fword_do_branch_header, F_STATE_QUOTE);
+
+    // Carry forward the string to the compiled word
+    int len = f->token_end - f->token_start;
+    char *buf = &f->input[f->token_start];
+    for (int i = 0; i < len; i ++) {
+        f->code[f->code_offset++].c = buf[i];
+    }
+    
+    (void) forth_resolve(f, F_STATE_QUOTE);
+
+    // Compile the quote handler
+    forth_compile_word(f, &fword_do_quote_header);
+
+    // Tag the length
+    f->code[f->code_offset++].n = len;
+}
+
+FWORD_IMM2(dot_quote, ".\"")
+{
+    fword_quote(f, w);
+    forth_compile_word(f, &fword_type_header);
+}
+
+/**********************************************************
+ *
+ * Input Processing Routines
+ *
+ **********************************************************/
+
+static int forth_get_input_char(F f)
+{
+    static char last_c;
+    char c;
+
+    // Line numbers aren't bumped until we're actually reading
+    // the character -after- a new line.
+    if (last_c == '\n') {
+        f->input_line_cnt ++;
+        f->input_line_begin_offset = f->input_offset;
+    }
+
+    if (f->input_offset >= f->input_len) return EOF;
+    last_c = c = f->input[f->input_offset++];
+
+    return c;
+}
+
+static int forth_parse_end(F f, int cons_char)
+{
+    if (cons_char) {
+        f->token_end = f->input_offset -1;
+    } else {
+        f->token_end = f->input_offset;
+    }
+
+    /* It turns out cons_char (consume character) is also is also equal to
+     * whether or not the delimter was found.
+     */
+
+    return cons_char;
+}
+
+static int forth_parse(F f, char delim) // delim --
+{
+    f->token_start = f->input_offset;
+
+    do {
+        int c = forth_get_input_char(f);
+        if (c == EOF)
+            return forth_parse_end(f, 0);
+        if (delim == ' ' && isspace(c))
+            return forth_parse_end(f, 1);
+        else if (delim == c)
+            return forth_parse_end(f, 1);
+    } while (1);
+}
+
+static int forth_token(F f)
+{
+    int i;
+
+    f->token_start = f->token_end = -1;
+
+    if (f->input_offset >= f->input_len) {
+        return 0;
+    }
+
+    /*
+     * Skip white space
+     */
+
+    i = f->input_offset;
+    while (i < f->input_len && isspace(f->input[i])) {
+        if (f->input[i++] == '\n') {
+            f->input_line_cnt ++;
+            f->input_line_begin_offset = i;
+        }
+    }
+    f->input_offset = i;
+
+    /*
+     * Parse for the next white space delimited token
+     */
+
+    (void) forth_parse(f, ' ');
+
+    i = f->token_start;
+    int e = f->token_end;
+    if (e <= i) return 0;
+
+    if (e - i >= MAX_INPUT_TOKEN_SZ) {
+        e = i + MAX_INPUT_TOKEN_SZ -1;
+    }
+
+    char *p = f->token_string;
+    while (i < e) {
+        *p++ = f->input[i++];
+    }
+    *p = '\0';
+
+    return 1;
+}
+
+static int forth_number_token(F f, cell *n)
+{
+    int i;
+    char *p;
+
+    if (strlen(f->token_string) == 8) {
+        for (i = 0; i < 8; i++) {
+            if (!isxdigit(f->token_string[i]))
+                break;
+        }
+
+        if (i == 8) {
+            // Assume it's a hex humber
+            *n = strtoll(f->token_string, NULL, 16);
+            return 1;
+        }
+    }
+
+    *n = strtoll(f->token_string, &p, 0);
+    if (*p == '\0') return 1;
+    else            return 0;
+}
+
+
+static forth_header_t *forth_lookup_token(F f)
+{
+    forth_header_t *p = f->dictionary_head;
+
+    while (p) {
+        if (strcmp(f->token_string, p->name) == 0) {
+            return p;
+        }
+        p = p->prev;
+    }
+
+    return NULL;
+}
+
+FWORD_DO(number)
+{
+    cell n;
+    
+    int is_number = forth_number_token(f, &n);
+
+    /*
+     * This is a last chance word.  If it's not a number, then
+     * break out.
+     */
+
+    forth_assert(f, is_number, FERR_INVALID_TOKEN,
+                 "Word %s wasn't found in the dictionary "
+                 "and doesn't look like a number", f->token_string);
+
+    /*
+     * Else, put code into the stream to push the number at run time
+     */
+
+    forth_compile_word(f, &fword_do_lit_header);
+    forth_compile_cons(f, n);
+}
 
 void forth_process_input(F f, char *input, int len)
 {
@@ -756,6 +891,12 @@ void forth_process_input(F f, char *input, int len)
     CALL(&anon_input_word);
 }
 
+/**********************************************************
+ *
+ * Initialization Routines
+ *
+ **********************************************************/
+
 forth_header_t *dictionary_ptrs[] = {
 #include "fwords.inc"
     NULL
@@ -777,6 +918,7 @@ F forth_new(void)
     f->rp = RSTACK_SIZE;
     f->lp = LOOP_STACK_SIZE;
     f->state_sp = STATE_STACK_SIZE;
+    f->string_sp = STRING_STACK_SIZE;
 
     return f;
 }

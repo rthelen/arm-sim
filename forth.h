@@ -21,9 +21,10 @@ typedef forth_environment_t *F;
 typedef struct forth_header_s forth_header_t;
 typedef void (*forth_code_word_t)(F f, forth_header_t *word_header);
 typedef union forth_body_u {
-    forth_header_t	*word;
-    int				 br_offset; // offset relative to current body cell for a branch
-    cell			 cons;      // constant for literal
+    forth_header_t  *word;
+    int              n;         // offset relative to current body cell for a branch
+    cell             cons;      // constant for literal
+    char             c;         // Character constant for quoted strings
 } forth_body_t;
 
 struct forth_header_s {
@@ -41,6 +42,11 @@ struct forth_header_s {
         cell			*array;    // Points to the contents of an array
     } p;
 };
+
+typedef struct forth_string_s {
+    int   len;
+    char *buf;
+} forth_string_t;
 
 typedef struct forth_state_s {
     int		state;
@@ -60,6 +66,7 @@ typedef struct forth_loop_s {
 #define RSTACK_SIZE          64
 #define LOOP_STACK_SIZE      16
 #define STATE_STACK_SIZE     16
+#define STRING_STACK_SIZE    16
 
 struct forth_environment_s {
     forth_header_t *dictionary_head;
@@ -73,12 +80,14 @@ struct forth_environment_s {
     int rp;            /* return stack pointer */
     int lp;            /* loop stack pointer */
     int state_sp;      /* state stack pointer */
+    int string_sp;     /* string stack pointer */
     forth_body_t *ip;     /* instruction pointer */
 
     cell           stack[STACK_SIZE];
     forth_body_t *rstack[RSTACK_SIZE];
     forth_loop_t  lstack[LOOP_STACK_SIZE];
     forth_state_t state_stack[STATE_STACK_SIZE];
+    forth_string_t string_stack[STRING_STACK_SIZE];
 
     char *input;
     int input_len;
@@ -139,6 +148,7 @@ enum {
     F_RETURN_STACK,
     F_LOOP_STACK,
     F_STATE_STACK,
+    F_STRING_STACK,
 };
 
 /*
@@ -148,6 +158,7 @@ enum {
     F_STATE_COLON = 1,
     F_STATE_DO,
     F_STATE_IF,
+    F_STATE_QUOTE,
 };
 
 /*
@@ -165,6 +176,8 @@ enum {
     FERR_LOOP_STACK_OVERFLOW,
     FERR_STATE_STACK_UNDERRUN,
     FERR_STATE_STACK_OVERFLOW,
+    FERR_STRING_STACK_UNDERRUN,
+    FERR_STRING_STACK_OVERFLOW,
     FERR_INVALID_TOKEN,
     FERR_EMBEDDED_COLON,
     FERR_SEMICOLON_WOUT_COLON,
