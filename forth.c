@@ -53,6 +53,7 @@ void ftest(void)
     F f = forth_new();
     char *input =
         ": cr 10 emit 13 emit ; "
+        "\" Hello\" 32 charcat \" world!\" strcat type cr "
         ".\" Printing 1 - 4\" cr "
         "5 1 do i . loop cr "
         ".\" Printing a 9x9 pyramid of stars\" cr "
@@ -706,6 +707,18 @@ FWORD(charcat)
     str.buf[str.len] = '\0';
     string_push(f, str);
 }
+
+FWORD(strcat)
+{
+    forth_string_t str2 = string_pop(f);
+    forth_string_t str1 = string_pop(f);
+    str1.len += str2.len;
+    str1.buf = realloc(str1.buf, str1.len +1);
+    strcat(str1.buf, str2.buf);
+    string_push(f, str1);
+    string_free(f, str2);
+}
+    
 
 /**********************************************************
  *
