@@ -56,7 +56,7 @@ void ftest(void)
         ".\" Printing 1 - 4\" cr "
         "5 1 do i . loop cr "
         ".\" Printing a 9x9 pyramid of stars\" cr "
-        ": star \" *\" type ; "
+        ": star \" \" 42 charcat type ; "
         ": spaces dup 0 > if 0 do 32 emit loop else drop then ; "
         ": stars  dup 0 > if 0 do   star  loop else drop then ; "
         "10 0 do 9 i - spaces i 2* 1 + stars cr loop "
@@ -696,6 +696,15 @@ FWORD_IMM2(dot_quote, ".\"")
 {
     fword_quote(f, w);
     forth_compile_word(f, &fword_type_header);
+}
+
+FWORD(charcat)
+{
+    forth_string_t str = string_pop(f);
+    str.buf = realloc(str.buf, str.len + 1);
+    str.buf[str.len++] = pop(f);
+    str.buf[str.len] = '\0';
+    string_push(f, str);
 }
 
 /**********************************************************
